@@ -9,6 +9,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const TasmeeApp());
 }
 
@@ -39,16 +40,49 @@ class _HomeState extends State<Home> {
   bool _want = false;
   String? _locale;
   Timer? _endTimer;
+  Timer? _themeTimer;
+  String? _lastInsets;
+  double _top = 0, _bottom = 0;
+  bool _dark = false;
 
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable(); // keep the screen on while reciting
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..addJavaScriptChannel('Tasmee', onMessageReceived: _onMessage);
+      ..setBackgroundColor(Colors.transparent)
+      ..addJavaScriptChannel('Tasmee', onMessageReceived: _onMessage)
+      ..setNavigationDelegate(NavigationDelegate(onPageFinished: (_) {
+        _lastInsets = null;
+        _applyInsets();
+      }));
     _load();
+    _applyBars();
+    // follow the page theme (day / night) so status-bar icons stay visible
+    _themeTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final r = await _web.runJavaScriptReturningResult(
+            "document.documentElement.getAttribute('data-theme')||''");
+        final dark = r.toString().contains('dark');
+        if (dark != _dark) {
+          _dark = dark;
+          _applyBars();
+        }
+      } catch (_) {}
+    });
+  }
+
+  void _applyBars() {
+    final icons = _dark ? Brightness.light : Brightness.dark;
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false,
+      statusBarIconBrightness: icons,
+      systemNavigationBarIconBrightness: icons,
+    ));
   }
 
   Future<void> _load() async {
@@ -57,9 +91,25 @@ class _HomeState extends State<Home> {
     await _web.loadHtmlString(html, baseUrl: 'https://tasmee.app/');
   }
 
+  // The page fills the whole screen (under the status bar and the gesture bar).
+  // We pad its content by the system bar sizes so nothing is hidden behind them.
+  void _applyInsets() {
+    final key = '$_top/$_bottom';
+    if (key == _lastInsets) return;
+    _lastInsets = key;
+    final css = 'html{padding-top:${_top}px!important;min-height:100%}'
+        'body{min-height:100vh;padding-bottom:calc(84px + ${_bottom}px)!important}'
+        '#fb{padding-bottom:calc(8px + ${_bottom}px)!important}'
+        '#modal .box{padding-bottom:calc(20px + ${_bottom}px)!important}';
+    _web.runJavaScript("(function(){var s=document.getElementById('__ins');"
+        "if(!s){s=document.createElement('style');s.id='__ins';document.head.appendChild(s)}"
+        's.textContent=${jsonEncode(css)}})()');
+  }
+
   @override
   void dispose() {
     _endTimer?.cancel();
+    _themeTimer?.cancel();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -160,8 +210,18 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final top = mq.viewPadding.top, bottom = mq.viewPadding.bottom;
+    if (top != _top || bottom != _bottom) {
+      _top = top;
+      _bottom = bottom;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _applyInsets());
+    }
+    // no SafeArea: the web page itself covers the entire screen
     return Scaffold(
-      body: SafeArea(child: WebViewWidget(controller: _web)),
+      backgroundColor: _dark ? Colors.black : const Color(0xFFF6F1E7),
+      resizeToAvoidBottomInset: false,
+      body: SizedBox.expand(child: WebViewWidget(controller: _web)),
     );
   }
 }
