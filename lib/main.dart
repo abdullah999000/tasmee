@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,8 +43,8 @@ class _HomeState extends State<Home> {
   Timer? _endTimer;
   Timer? _themeTimer;
   String? _lastInsets;
-  double _top = 0, _bottom = 0;
-  bool _dark = false;
+  double _top = 0, _bottom = 0, _left = 0, _right = 0;
+  bool _dark = true; // the page starts in dark mode
 
   @override
   void initState() {
@@ -56,21 +57,30 @@ class _HomeState extends State<Home> {
       ..setNavigationDelegate(NavigationDelegate(onPageFinished: (_) {
         _lastInsets = null;
         _applyInsets();
+        _checkTheme();
       }));
+    // keep layout identical on every phone, whatever the system font scale is
+    // (the Quran text has its own size slider inside the app)
+    final platform = _web.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setTextZoom(100);
+    }
     _load();
     _applyBars();
     // follow the page theme (day / night) so status-bar icons stay visible
-    _themeTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        final r = await _web.runJavaScriptReturningResult(
-            "document.documentElement.getAttribute('data-theme')||''");
-        final dark = r.toString().contains('dark');
-        if (dark != _dark) {
-          _dark = dark;
-          _applyBars();
-        }
-      } catch (_) {}
-    });
+    _themeTimer = Timer.periodic(const Duration(seconds: 1), (_) => _checkTheme());
+  }
+
+  Future<void> _checkTheme() async {
+    try {
+      final r = await _web.runJavaScriptReturningResult(
+          "document.documentElement.getAttribute('data-theme')||''");
+      final dark = r.toString().contains('dark');
+      if (dark != _dark) {
+        setState(() => _dark = dark);
+        _applyBars();
+      }
+    } catch (_) {}
   }
 
   void _applyBars() {
@@ -94,13 +104,15 @@ class _HomeState extends State<Home> {
   // The page fills the whole screen (under the status bar and the gesture bar).
   // We pad its content by the system bar sizes so nothing is hidden behind them.
   void _applyInsets() {
-    final key = '$_top/$_bottom';
+    final key = '$_top/$_bottom/$_left/$_right';
     if (key == _lastInsets) return;
     _lastInsets = key;
-    final css = 'html{padding-top:${_top}px!important;min-height:100%}'
-        'body{min-height:100vh;padding-bottom:calc(84px + ${_bottom}px)!important}'
-        '#fb{padding-bottom:calc(8px + ${_bottom}px)!important}'
-        '#modal .box{padding-bottom:calc(20px + ${_bottom}px)!important}';
+    // The new page reads these two variables (top bar / bottom controls / sheets).
+    final css = ':root{--safe-top:${_top}px!important;--safe-bottom:${_bottom}px!important;'
+        '--safe-left:${_left}px!important;--safe-right:${_right}px!important}'
+        '.top-bar{padding-top:calc(10px + ${_top}px)!important}'
+        '@media(max-width:360px){.top-bar{padding-top:calc(8px + ${_top}px)!important}}'
+        '@media(max-height:500px){.top-bar{padding-top:calc(4px + ${_top}px)!important}}';
     _web.runJavaScript("(function(){var s=document.getElementById('__ins');"
         "if(!s){s=document.createElement('style');s.id='__ins';document.head.appendChild(s)}"
         's.textContent=${jsonEncode(css)}})()');
@@ -211,16 +223,22 @@ class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final top = mq.viewPadding.top, bottom = mq.viewPadding.bottom;
-    if (top != _top || bottom != _bottom) {
+    final top = mq.viewPadding.top;
+    final left = mq.viewPadding.left, right = mq.viewPadding.right;
+    // when the keyboard is open the body already shrinks above it,
+    // so the gesture-bar padding must not be counted twice
+    final bottom = (mq.viewPadding.bottom - mq.viewInsets.bottom).clamp(0.0, 200.0).toDouble();
+    if (top != _top || bottom != _bottom || left != _left || right != _right) {
       _top = top;
       _bottom = bottom;
+      _left = left;
+      _right = right;
       WidgetsBinding.instance.addPostFrameCallback((_) => _applyInsets());
     }
     // no SafeArea: the web page itself covers the entire screen
     return Scaffold(
-      backgroundColor: _dark ? Colors.black : const Color(0xFFF6F1E7),
-      resizeToAvoidBottomInset: false,
+      backgroundColor: _dark ? const Color(0xFF101114) : const Color(0xFFF5F0E6),
+      resizeToAvoidBottomInset: true, // keyboard shrinks the page (search box stays visible)
       body: SizedBox.expand(child: WebViewWidget(controller: _web)),
     );
   }
