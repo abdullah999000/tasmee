@@ -23,3 +23,14 @@ s = re.sub(r'android:label="[^"]*"', 'android:label="مُسمِّع"', s, count=
 
 open(path, "w", encoding="utf-8").write(s)
 print("manifest patched")
+
+# draw under the notch / camera cutout too (true full screen)
+import os
+styles = os.path.join(os.path.dirname(path), "..", "res", "values", "styles.xml")
+if os.path.exists(styles):
+    t = open(styles, encoding="utf-8").read()
+    if "windowLayoutInDisplayCutoutMode" not in t:
+        item = '        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>\n'
+        t = re.sub(r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>\n)', lambda m: m.group(1) + item, t)
+        open(styles, "w", encoding="utf-8").write(t)
+        print("styles patched")
