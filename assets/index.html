@@ -8,7 +8,7 @@
 <style>
 :root{--bg:#f6f1e7;--card:#fffdf8;--ink:#1d2b24;--mute:#6b7a72;--line:#e2d9c6;--pri:#0f6b4f;
 --ok:#1e9e5a;--bad:#d93a3a;--miss:#e8851a;--rev:#d9b400;--pend:#9aa59f;
-box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101a16;--card:#17241f;--ink:#eaf1ed;--mute:#9fb0a7;--line:#2a3b34;--pri:#35c28f;--pend:#7d8a84;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#101a16;--card:#17241f;--ink:#eaf1ed;--mute:#9fb0a7;--line:#2a3b34;--pri:#35c28f;--pend:#7d8a84;color-scheme:dark}
 *{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -68,6 +68,19 @@ button.stop{background:var(--bad)}
 .w.cur.halt{--hl:color-mix(in srgb,var(--bad) 42%,var(--card));outline-color:var(--bad)}
 .pg .w.cur.halt{--hl:color-mix(in srgb,var(--bad) 42%,var(--pgbg))}
 .w.cur i{background:none}
+
+/* ===== FULL SCREEN + FULL-BLEED MUSHAF ===== */
+html,body{width:100%;min-height:100%;margin:0;background:var(--bg)}
+body{min-height:100vh;min-height:100dvh;overflow-x:hidden}
+.wrap{max-width:none;width:100%;padding:10px 8px}
+.card.mcard{padding:0;margin:0 -8px 12px;border-radius:0;border-left:0;border-right:0;background:transparent}
+.card.mcard #pnav{padding:6px 8px;margin:0}
+.card.mcard .mushaf{font-size:30px}
+.pg{max-width:none;width:100%;margin:0;padding:0}
+.pgf{border-radius:0;border-left-width:0;border-right-width:0;padding:4px 6px;outline:0;box-shadow:none;
+ min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);display:flex;flex-direction:column;justify-content:space-between}
+.pgf .pgh{flex:none}.pgf .pgn{flex:none}
+.pgf .ln,.pgf .sb,.pgf .bs{height:calc(var(--fs,26px)*var(--lh,2.05))}
 </style>
 </head>
 <body>
@@ -87,7 +100,7 @@ button.stop{background:var(--bad)}
 <span class="dot" style="background:var(--rev)"></span>مراجعة — الإطار المضيء هو موضعك الحالي، وعند أي خطأ يرنّ الجرس وتُسجَّل عليك (وإن ألغيتَ «التوقف عند الخطأ» يكمل معك دون توقف)، ثم يمكنك إعادة الكلمة أو الآية أو المتابعة مباشرة؛ يكمل التطبيق معك والخطأ يبقى محسوباً. اضغط على أي كلمة ملوّنة للتفاصيل</div>
 </div>
 
-<div class="card"><div id="pnav"></div><div class="mushaf" id="text"></div></div>
+<div class="card mcard"><div id="pnav"></div><div class="mushaf" id="text"></div></div>
 
 <div class="card"><div class="stats">
 <div><b id="s_ok">0</b><span>صحيح</span></div><div><b id="s_bad">0</b><span>خطأ</span></div>
@@ -344,9 +357,13 @@ async function loadPage(n,aiStart){
  msg('');return true}
 function fitPage(){const pg=document.querySelector('.pg');if(!pg)return;
  const lines=[...pg.querySelectorAll('.ln')].filter(l=>!l.classList.contains('c'));if(!lines.length)return;
- const W=pg.querySelector('.pgf').clientWidth-24;let fs=40;pg.style.setProperty('--fs',fs+'px');
+ const W=pg.querySelector('.pgf').clientWidth-14;let fs=44;pg.style.setProperty('--fs',fs+'px');
  for(let i=0;i<14;i++){let mx=0;lines.forEach(l=>{let t=0;[...l.children].forEach(c=>t+=c.getBoundingClientRect().width+6);mx=Math.max(mx,t)});
-  if(mx<=W)break;fs=Math.max(12,fs*Math.min(.98,W/(mx||W)));pg.style.setProperty('--fs',fs+'px')}}
+  if(mx<=W)break;fs=Math.max(12,fs*Math.min(.98,W/(mx||W)));pg.style.setProperty('--fs',fs+'px')}
+ // stretch line spacing so the whole page fills the screen height
+ const f=pg.querySelector('.pgf');const n=f.querySelectorAll('.ln,.sb,.bs').length||15;
+ const other=(f.querySelector('.pgh')?.offsetHeight||0)+(f.querySelector('.pgn')?.offsetHeight||0)+20;
+ const avail=innerHeight-150-other;let lh=avail/n/fs;lh=Math.min(3.2,Math.max(2.05,lh));pg.style.setProperty('--lh',lh)}
 addEventListener('resize',()=>fitPage());
 function buildPage(n){
  const by={};R.forEach((r,j)=>{(by[r.line]=by[r.line]||[]).push(j)});
@@ -360,7 +377,7 @@ function buildPage(n){
  $('pnav').style.display='flex';
  $('pnav').innerHTML=`<button class="sec" id="pp">◀ السابقة</button><input id="pn" type="number" min="1" max="604" value="${n}" style="width:72px;text-align:center"><button class="sec" id="pg2">اذهب</button><button class="sec" id="pnx">التالية ▶</button>`;
  $('pp').onclick=()=>loadPage(n-1);$('pnx').onclick=()=>loadPage(n+1);$('pg2').onclick=()=>loadPage(+$('pn').value);
- $('ttl').textContent='صفحة '+n;$('nav').open=false;draw()}
+ $('ttl').textContent='صفحة '+n;$('nav').open=false;draw();setTimeout(()=>{const f=document.querySelector('.pgf');if(f)f.scrollIntoView({block:'start',behavior:'smooth'})},120)}
 async function go(s,e,t){if($('pm').checked&&full&&AY[s]){if(await loadPage(AY[s].page,s))return}loadRange(s,e,t)}
 $('tj').onchange=()=>{const g=document.querySelector('.pg');if(g)g.classList.toggle('tj',$('tj').checked)};
 $('pm').onchange=()=>{if(!R.length)return;const s=R[Math.min(p,R.length-1)].ai;
