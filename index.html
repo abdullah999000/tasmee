@@ -3111,6 +3111,17 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
         التقدم المعروض: <span style="font-weight: 700; color: #ffffff;">الحفظ</span>
       </div>
     </div>
+    <div class="sub-filter-row" style="gap:6px; padding-top:4px; padding-bottom:8px;">
+      <input id="quick-jump-page" type="number" min="1" max="604" placeholder="صفحة (١-٦٠٤)"
+        style="background:#1c1e24;border:1px solid #2b2e37;color:#fff;border-radius:8px;padding:6px 8px;width:36%;font-family:inherit;font-size:12px;"
+        onkeydown="if(event.key==='Enter') executeQuickNavigatorJump()">
+      <input id="quick-jump-ayah" type="number" min="1" max="286" placeholder="آية (اختياري)"
+        style="background:#1c1e24;border:1px solid #2b2e37;color:#fff;border-radius:8px;padding:6px 8px;width:36%;font-family:inherit;font-size:12px;"
+        onkeydown="if(event.key==='Enter') executeQuickNavigatorJump()">
+      <button class="filter-action-btn" onclick="executeQuickNavigatorJump()" style="background:#34d399;color:#04130c;font-weight:700;padding:6px 12px;border-radius:8px;justify-content:center;">
+        انتقال
+      </button>
+    </div>
 
     <!-- 4. Index Scroll List Container -->
     <div class="index-list-container" id="index-scroll-list">
@@ -3926,16 +3937,16 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
           <div class="q-lines-container" id="q-lines-container"></div>
         </div>
 
-        <!-- Card Footer: Surah & Ayah on Left, Eye-Slash Reveal All Toggle on Right -->
-        <div class="q-card-footer">
+        <!-- Card Footer: Surah & Ayah on Right, Eye-Slash Reveal All Toggle on Left (Matching Image 2) -->
+        <div class="q-card-footer" dir="rtl">
+          <div style="text-align:right;" dir="rtl">
+            <div class="q-card-surah-title" id="q-card-surah-title">البقرة ٢</div>
+            <div class="q-card-ayah-sub" id="q-card-ayah-sub">الآية ١٨٠ ☾</div>
+          </div>
+
           <button class="icon-btn" onclick="toggleRevealAllQuizCard()" title="إظهار / إخفاء النص بالكامل" style="color:#ffffff;">
             <svg viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27z"/></svg>
           </button>
-
-          <div style="text-align:left;" dir="rtl">
-            <div class="q-card-surah-title" id="q-card-surah-title">البقرة ٢</div>
-            <div class="q-card-ayah-sub" id="q-card-ayah-sub">الآية ١٦٤ ☾</div>
-          </div>
         </div>
       </div>
     </div>
@@ -4126,6 +4137,9 @@ if (window.Tasmee) {
       const txt = typeof data === 'string' ? data : ((data && (data.text || data.transcript)) || '');
       const isFin = typeof data === 'object' && data !== null ? !!(data.final ?? data.isFinal ?? false) : false;
       const it = [{ transcript: txt }];
+      if (data && Array.isArray(data.alts)) {
+        data.alts.forEach(a => { if (a && a !== txt) it.push({ transcript: String(a) }); });
+      }
       it.isFinal = isFin;
       r.onresult({ resultIndex: 0, results: [it] });
     } else if (type === 'error' && r.onerror) {
@@ -4904,6 +4918,7 @@ async function loadMushafPage(pageNumber) {
   currentWordList = pageData.words;
   wordStates = currentWordList.map(() => 'pending');
   currentWordIndex = 0;
+  manualWordSelected = false;
   haltError = null;
   wordErrors = [];
   clearReplayState();
@@ -5162,7 +5177,7 @@ function showWordDetailModal(w, state, idx) {
       </div>
     </div>
     <div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
-      <button class="pill-tab-btn active" style="flex:1; background: var(--accent-green); color: #000;" onclick="closeWordModal(); currentWordIndex = ${idx}; startRecitation();">🎤 ابدأ التسميع من هنا</button>
+      <button class="pill-tab-btn active" style="flex:1; background: var(--accent-green); color: #000;" onclick="closeWordModal(); currentWordIndex = ${idx}; manualWordSelected = true; startRecitation();">🎤 ابدأ التسميع من هنا</button>
       <button class="pill-tab-btn active" style="flex:1;" onclick="closeWordModal(); playSpecificAyahAudio(${w.s || 2}, ${w.a});">🎧 استماع للشيخ</button>
       <button class="pill-tab-btn" style="border: 1px solid var(--border-dark);" onclick="playWordTTS('${w.t}')">🔊 نطق</button>
       <button class="pill-tab-btn" style="border: 1px solid var(--border-dark);" onclick="closeWordModal()">إغلاق</button>
@@ -5479,8 +5494,8 @@ function startRecitation() {
   const resuming = !isReciting && !isQuizModeActive && currentWordIndex > 0 && lastStopInfo &&
     lastStopInfo.page === currentPage && lastStopInfo.idx === currentWordIndex && wordStates.length === currentWordList.length;
   if (!isReciting && !isQuizModeActive) {
-    // manual start (a word was chosen first / resuming) is kept exactly as before; otherwise search automatically
-    startLocked = !smartStartEnabled || currentWordIndex > 0;
+    // Search automatically across the page unless user explicitly clicked "ابدأ التسميع من هنا" or is resuming
+    startLocked = !smartStartEnabled || (manualWordSelected && currentWordIndex > 0) || resuming;
     smartStartWaitTokens = 0;
   }
   if (!isReciting && !isQuizModeActive && !resuming) {
@@ -5749,35 +5764,55 @@ function normalizeTokenStream(rawTokens) {
 // <SMART_START_BEGIN>
 // ==========================================================================
 // SMART RECITATION START DETECTION (works fully on-device, no network)
-// Finds WHERE on the page the reader began, by aligning several consecutive spoken
-// words with the Mushaf text (local alignment, tolerant to a misheard / skipped word).
-// Nothing is judged (no mistakes, no red words) until the position is confident and unique.
+// Finds WHERE on the page the reader began, by aligning spoken words with
+// the Mushaf text (local alignment, tolerant to a misheard / skipped word).
 // ==========================================================================
-const SMART_START_MIN_STRICT = 3;     // consecutive-ish words that must match exactly
-const SMART_START_GIVE_UP_TOKENS = 12; // still ambiguous after this many words -> ask for a manual tap
+const SMART_START_MIN_STRICT = 2;     // 2 matching words (or 1 unique distinctive word) lock immediately
+const SMART_START_GIVE_UP_TOKENS = 12;
+let manualWordSelected = false;
+
 function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   const live = [];
   for (let k = 0; k < wordTexts.length; k++) if (normArabic(wordTexts[k])) live.push(k);
   const W = live.length, T = tokens.length;
-  if (T < 2 || W < 2) return { state: 'wait', reason: 'few-words' };
-  const MATCH = 3, FUZZY = 1.2, MIS = -2.5, GAP = -2;
-  // score matrix + traceback
+  if (T < 1 || W < 1) return { state: 'wait', reason: 'few-words' };
+
+  // Fast-path: 1 distinctive Quranic word (>= 5 letters) that occurs only once on the page
+  if (T === 1) {
+    const tok0 = normArabic(tokens[0]);
+    if (tok0.length >= 5 && !SHORT_PARTICLES.has(tok0)) {
+      const hits = [];
+      for (let j = 0; j < W; j++) {
+        if (strictFn(tokens[0], wordTexts[live[j]])) hits.push(live[j]);
+      }
+      if (hits.length === 1) {
+        return {
+          state: 'locked', score: 3, strict: 1,
+          firstWord: hits[0], lastWord: hits[0], matched: [hits[0]],
+          consumedTokens: 1
+        };
+      }
+    }
+    return { state: 'wait', reason: 'few-words' };
+  }
+
+  const MATCH = 3, FUZZY = 1.4, MIS = -2.2, GAP = -1.8;
   const H = [], B = [];
   const sm = (i, j) => {
     const t = tokens[i], w = wordTexts[live[j]];
     if (strictFn(t, w)) return MATCH;
     const a = normArabic(t), b = normArabic(w);
-    if (a.length >= 4 && b.length >= 4 && simFn(a, b) >= 0.8) return FUZZY;
+    if (a.length >= 3 && b.length >= 3 && simFn(a, b) >= 0.76) return FUZZY;
     return MIS;
   };
   for (let i = 0; i <= T; i++) { H.push(new Array(W + 1).fill(0)); B.push(new Array(W + 1).fill(0)); }
-  const cand = [];   // best end cell per word column
+  const cand = [];
   for (let j = 1; j <= W; j++) {
     let bestI = 0, bestV = 0;
     for (let i = 1; i <= T; i++) {
       const diag = H[i - 1][j - 1] + sm(i - 1, j - 1);
-      const up = H[i - 1][j] + GAP;      // extra spoken word (noise)
-      const left = H[i][j - 1] + GAP;    // page word the reader skipped
+      const up = H[i - 1][j] + GAP;
+      const left = H[i][j - 1] + GAP;
       let v = 0, b = 0;
       if (diag > v) { v = diag; b = 1; }
       if (up > v) { v = up; b = 2; }
@@ -5801,18 +5836,21 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   const best = cand[0];
   const pairs = trace(best);
   const strictPairs = pairs.filter(p => p[2] >= MATCH - 0.01);
+  const posPairs = pairs.filter(p => p[2] > 0);
   const strictLen = strictPairs.reduce((n, p) => n + normArabic(wordTexts[live[p[1]]]).length, 0);
-  const enough = strictPairs.length >= SMART_START_MIN_STRICT || (strictPairs.length >= 2 && strictLen >= 10);
+  const enough = (strictPairs.length >= 2 && strictLen >= 6)
+              || strictPairs.length >= 3
+              || (strictPairs.length >= 1 && posPairs.length >= 2 && best.v >= 4.2);
   if (!enough) return { state: 'wait', reason: 'low-evidence', score: best.v };
-  // uniqueness: is there a DIFFERENT place on the page that explains the words about as well?
+
   const usedCols = new Set(pairs.map(p => p[1]));
   const lo = Math.min(...usedCols), hi = Math.max(...usedCols);
   let rival = null;
   for (let q = 1; q < cand.length; q++) {
     const c = cand[q];
-    if (c.j - 1 >= lo - 1 && c.j - 1 <= hi + 1) continue;      // same alignment
-    if (best.v - c.v < MATCH) { rival = c; break; }
-    break;                                                      // sorted: the rest are weaker still
+    if (c.j - 1 >= lo - 1 && c.j - 1 <= hi + 1) continue;
+    if (best.v - c.v < 1.8) { rival = c; break; }
+    break;
   }
   if (rival) {
     return (T >= SMART_START_GIVE_UP_TOKENS)
@@ -5820,7 +5858,10 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
       : { state: 'wait', reason: 'ambiguous', score: best.v };
   }
   const first = live[pairs[0][1]], last = live[pairs[pairs.length - 1][1]];
-  const matched = pairs.filter(p => p[2] > 0).map(p => live[p[1]]);
+  const matched = [];
+  for (let idx = first; idx <= last; idx++) {
+    if (!isQuranPauseMark(wordTexts[idx])) matched.push(idx);
+  }
   return {
     state: 'locked', score: best.v, strict: strictPairs.length,
     firstWord: first, lastWord: last, matched,
@@ -6213,12 +6254,13 @@ function resolveMismatch(prevToken, token, prevPrevToken) {
 function scheduleMismatchCheck(gi, token, prevToken, prevPrevToken) {
   clearTimeout(interimMistakeTimer);
   const capIdx = currentWordIndex, epoch = utterEpoch;
+  const waitMs = isFastSpeech() ? 500 : 1000;
   interimMistakeTimer = setTimeout(() => {
     if (!isReciting || epoch !== utterEpoch || currentWordIndex !== capIdx) return;
     if (latestTokenList[gi] !== token) return;
     lastProcessedTokenCount = Math.max(lastProcessedTokenCount, gi + 1);
     resolveMismatch(prevToken, token, prevPrevToken);
-  }, 1100);
+  }, waitMs);
 }
 
 // Where do the new words of this recognizer event start?  Works for cumulative text (browser) AND
@@ -6244,19 +6286,26 @@ function processRecitedText(text, isFinal) {
   const tokens = normalizeTokenStream(rawTokens);
   if (!tokens.length) return;
 
-  // ---- smart start: do NOT judge anything until we know where the reader began ----
-  if (!startLocked && !isQuizModeActive) {
-    const r = smartLocateStart(currentWordList.map(w => w.t), tokens, isStrictMatch, simScore);
-    if (r.state === 'locked') {
-      lastProcessedTokenCount = r.consumedTokens; prevTokenList = tokens; latestTokenList = tokens;
-      if (!applySmartStart(r)) return;
+  // ---- smart start & anywhere-on-page pickup: do NOT force starting from top of page ----
+  if ((!startLocked || (smartStartEnabled && isFreshStart() && !manualWordSelected)) && !isQuizModeActive) {
+    const curExp = currentWordList[currentWordIndex]?.t || '';
+    const matchesCurrentPointer = tokens.length > 0 && isWordMatch(tokens[0], curExp);
+    if (!startLocked || !matchesCurrentPointer) {
+      const r = smartLocateStart(currentWordList.map(w => w.t), tokens, isStrictMatch, simScore);
+      if (r.state === 'locked') {
+        lastProcessedTokenCount = r.consumedTokens; prevTokenList = tokens; latestTokenList = tokens;
+        if (!applySmartStart(r)) return;
+        if (r.consumedTokens >= tokens.length) return;
+      } else if (!startLocked) {
+        lastProcessedTokenCount = 0; prevTokenList = tokens; latestTokenList = tokens;
+        smartStartWaitTokens = tokens.length;
+        smartStatus(r.state === 'ambiguous'
+          ? '⚠️ الموضع متشابه في أكثر من مكان — اضغط على الكلمة التي بدأت منها'
+          : '🔎 جارٍ تحديد موضع البداية… تابع القراءة (لا تُحسب أخطاء الآن)');
+        return;
+      }
     } else {
-      lastProcessedTokenCount = 0; prevTokenList = tokens; latestTokenList = tokens;
-      smartStartWaitTokens = tokens.length;
-      smartStatus(r.state === 'ambiguous'
-        ? '⚠️ الموضع متشابه في أكثر من مكان — اضغط على الكلمة التي بدأت منها'
-        : '🔎 جارٍ تحديد موضع البداية… تابع القراءة (لا تُحسب أخطاء الآن)');
-      return;
+      startLocked = true;
     }
   }
 
@@ -6611,6 +6660,31 @@ function renderSurahsTab() {
 function selectSurah(startPage) {
   closeDrawer();
   loadMushafPage(startPage);
+}
+
+async function executeQuickNavigatorJump() {
+  const pInp = document.getElementById('quick-jump-page');
+  const aInp = document.getElementById('quick-jump-ayah');
+  const pVal = pInp ? parseInt(pInp.value, 10) : NaN;
+  const aVal = aInp ? parseInt(aInp.value, 10) : NaN;
+
+  closeDrawer();
+  if (!isNaN(pVal) && pVal >= 1 && pVal <= 604) {
+    await loadMushafPage(pVal);
+  }
+  if (!isNaN(aVal) && aVal >= 1) {
+    const targetSurah = currentWordList[0]?.s || 2;
+    const wordIdx = currentWordList.findIndex(w => w.a === aVal);
+    if (wordIdx >= 0) {
+      currentWordIndex = wordIdx;
+      manualWordSelected = true;
+      selectedAyahInfo = { surah: currentWordList[wordIdx].s || targetSurah, ayah: aVal };
+      renderCurrentPage();
+      autoScrollToCurrentWord(true);
+    } else {
+      await jumpToSearchedAyah(currentPage, targetSurah, aVal);
+    }
+  }
 }
 
 // Render Ajza Tab
@@ -7571,6 +7645,10 @@ async function launchQuizRoundWithCountdown() {
   back2.classList.remove('reading-mode');
   cdView.style.display = 'flex';
   recView.style.display = 'none';
+  const assistRow = document.getElementById('q-assist-buttons-row');
+  if (assistRow) assistRow.style.display = 'none';
+  const timerLbl = document.getElementById('q-timer-lbl');
+  if (timerLbl) timerLbl.textContent = '٠٠:٠٠';
 
   updateQuizRoundHeaderUI();
 
@@ -7608,6 +7686,8 @@ function enterActiveQuizRecitingCard() {
   back2.classList.add('reading-mode');
   cdView.style.display = 'none';
   recView.style.display = 'flex';
+  const assistRow = document.getElementById('q-assist-buttons-row');
+  if (assistRow) assistRow.style.display = 'flex';
 
   renderQuizCardPassageContent();
 
