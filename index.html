@@ -3875,6 +3875,36 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
 
       <!-- Expandable Saved Mistakes List & Custom Scope Panel -->
       <div id="quiz-mistakes-expand-panel" style="display:none;background:#17191e;border:1px solid #2b2e37;border-radius:14px;padding:12px;margin-top:8px;">
+        <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #2b2e37;">
+          <div style="font-size:14px;font-weight:700;color:var(--accent-green);margin-bottom:8px;">🎯 تحديد نطاق مخصص للاختبار أو القراءة وموضع البداية:</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div>
+              <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">اختر الجزء (١ - ٣٠):</label>
+              <select id="quiz-custom-juz" onchange="onQuizCustomJuzChange(this.value)" style="width:100%;padding:7px 8px;border-radius:8px;background:#1c1e24;border:1px solid #374151;color:#fff;font-family:inherit;font-size:12px;"></select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">اختر السورة (١ - ١١٤):</label>
+              <select id="quiz-custom-surah" onchange="onQuizCustomSurahChange(this.value)" style="width:100%;padding:7px 8px;border-radius:8px;background:#1c1e24;border:1px solid #374151;color:#fff;font-family:inherit;font-size:12px;"></select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">رقم الصفحة (١ - ٦٠٤):</label>
+              <input id="quiz-custom-page" type="number" min="1" max="604" value="25" onchange="onQuizCustomPageChange(this.value)" style="width:100%;padding:6px 8px;border-radius:8px;background:#1c1e24;border:1px solid #374151;color:#fff;font-family:inherit;font-size:12px;">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:3px;">موضع البداية في الصفحة:</label>
+              <select id="quiz-custom-start-pos" style="width:100%;padding:7px 8px;border-radius:8px;background:#1c1e24;border:1px solid #374151;color:#fff;font-family:inherit;font-size:12px;">
+                <option value="page_start">بداية الصفحة (أول آية)</option>
+                <option value="page_mid">منتصف الصفحة</option>
+                <option value="page_last_third">الثلث الأخير من الصفحة</option>
+                <option value="selected_ayah">الآية المحددة حالياً</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="startCustomScopeQuiz()" style="flex:1;padding:8px 10px;border-radius:8px;background:var(--accent-green);color:#04130c;border:none;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;">🧠 ابدأ الاختبار من هذا الموضع</button>
+            <button onclick="startCustomScopeReading()" style="flex:1;padding:8px 10px;border-radius:8px;background:rgba(52,211,153,0.16);color:var(--accent-green);border:1px solid var(--accent-green);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">🎤 ابدأ التلاوة من هذا الموضع</button>
+          </div>
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <span style="font-size:14px;font-weight:700;color:#fff;">سجل الكلمات التي تعثرت فيها (سيتم اختبارك من قبلها بـ ٣-٤ آيات):</span>
           <button onclick="clearAllSavedMistakes()" style="background:transparent;border:1px solid rgba(239,68,68,0.4);color:#f87171;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">مسح الكل</button>
@@ -4279,6 +4309,49 @@ const ALL_SURAHS = [
   {s:113, n:"الفلق", e:"Al-Falaq", t:"مكية", c:5, p:604, j:30},
   {s:114, n:"الناس", e:"An-Nas", t:"مكية", c:6, p:604, j:30}
 ];
+
+// Authentic 30 Ajza (Juz 1 to 30) Metadata with Exact Madinah Mushaf Starting Page, Surah & Ayah
+const ALL_AJZA = [
+  {j:1, p:1, s:1, a:1, n:"الفاتحة"},
+  {j:2, p:22, s:2, a:142, n:"البقرة"},
+  {j:3, p:42, s:2, a:253, n:"البقرة"},
+  {j:4, p:62, s:3, a:92, n:"آل عمران"},
+  {j:5, p:82, s:4, a:24, n:"النساء"},
+  {j:6, p:102, s:4, a:148, n:"النساء"},
+  {j:7, p:121, s:5, a:82, n:"المائدة"},
+  {j:8, p:142, s:6, a:111, n:"الأنعام"},
+  {j:9, p:162, s:7, a:88, n:"الأعراف"},
+  {j:10, p:182, s:8, a:41, n:"الأنفال"},
+  {j:11, p:201, s:9, a:93, n:"التوبة"},
+  {j:12, p:222, s:11, a:6, n:"هود"},
+  {j:13, p:242, s:12, a:53, n:"يوسف"},
+  {j:14, p:262, s:15, a:1, n:"الحجر"},
+  {j:15, p:282, s:17, a:1, n:"الإسراء"},
+  {j:16, p:302, s:18, a:75, n:"الكهف"},
+  {j:17, p:322, s:21, a:1, n:"الأنبياء"},
+  {j:18, p:342, s:23, a:1, n:"المؤمنون"},
+  {j:19, p:362, s:25, a:21, n:"الفرقان"},
+  {j:20, p:382, s:27, a:56, n:"النمل"},
+  {j:21, p:402, s:29, a:46, n:"العنكبوت"},
+  {j:22, p:422, s:33, a:31, n:"الأحزاب"},
+  {j:23, p:442, s:36, a:28, n:"يس"},
+  {j:24, p:462, s:39, a:32, n:"الزمر"},
+  {j:25, p:482, s:41, a:47, n:"فصلت"},
+  {j:26, p:502, s:46, a:1, n:"الأحقاف"},
+  {j:27, p:522, s:51, a:31, n:"الذاريات"},
+  {j:28, p:542, s:58, a:1, n:"المجادلة"},
+  {j:29, p:562, s:67, a:1, n:"الملك"},
+  {j:30, p:582, s:78, a:1, n:"النبأ"}
+];
+
+function getJuzByPage(pageNumber) {
+  let jNum = 1;
+  for (let i = 0; i < ALL_AJZA.length; i++) {
+    if (pageNumber >= ALL_AJZA[i].p) jNum = ALL_AJZA[i].j;
+    else break;
+  }
+  return jNum;
+}
 
 // Arabic Numeral Converter
 const toArabicNum = n => {
@@ -4830,7 +4903,7 @@ function toggleTajweed(enabled) {
 }
 
 // Load Mushaf Page
-function getPageDataFromMemory(pageNumber) {
+function getPageDataFromMemory(pageNumber, allowPartialOfflineFallback) {
   if (pageNumber < 1 || pageNumber > 604) return null;
   if (pageNumber === 25) return PRECACHED_PAGE_25;
   if (pageNumber === 62) return PRECACHED_PAGE_62;
@@ -4838,42 +4911,52 @@ function getPageDataFromMemory(pageNumber) {
     return buildPageDataFromVersesObj(PRECACHED_PAGES_MAP[pageNumber]);
   }
   try {
-    const cached = localStorage.getItem('qpg_' + pageNumber);
-    if (cached) return JSON.parse(cached);
+    const cached = localStorage.getItem('qpg_full_' + pageNumber);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && Array.isArray(parsed.words) && parsed.words.length > 0) return parsed;
+    }
   } catch (_) {}
 
-  const pool = (FULL_QURAN_CACHE && FULL_QURAN_CACHE.length) ? FULL_QURAN_CACHE : OFFLINE_SEARCH_AYAHS;
-  const pageVerses = pool.filter(v => v.p === pageNumber);
-  if (pageVerses.length > 0) {
-    const words = [];
-    const sNum = pageVerses[0].s;
-    pageVerses.forEach(v => {
-      const ws = v.t.split(/\s+/).filter(Boolean);
-      ws.forEach((wText, idx) => words.push({
-        t: wText,
-        s: v.s,
-        a: v.a,
-        end: idx === ws.length - 1
-      }));
-    });
-    const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
-    const built = {
-      surahNumber: sNum,
-      surahName: "سورة " + surahObj.n,
-      pageNumber: pageNumber,
-      juzNumber: surahObj.j,
-      hizbNumber: Math.ceil(surahObj.j * 2 - 1),
-      words: words
-    };
-    try { localStorage.setItem('qpg_' + pageNumber, JSON.stringify(built)); } catch (_) {}
-    return built;
+  // Only build from FULL_QURAN_CACHE when all 6236 verses are loaded (never poison cache with 1-verse OFFLINE_SEARCH_AYAHS snippets!)
+  const hasFullCache = !!(FULL_QURAN_CACHE && FULL_QURAN_CACHE.length >= 6000);
+  const pool = hasFullCache ? FULL_QURAN_CACHE : (allowPartialOfflineFallback ? OFFLINE_SEARCH_AYAHS : null);
+  if (pool) {
+    const pageVerses = pool.filter(v => v.p === pageNumber);
+    if (pageVerses.length > 0) {
+      const words = [];
+      const sNum = pageVerses[0].s;
+      pageVerses.forEach(v => {
+        const ws = v.t.split(/\s+/).filter(Boolean);
+        ws.forEach((wText, idx) => words.push({
+          t: wText,
+          s: v.s,
+          a: v.a,
+          end: idx === ws.length - 1
+        }));
+      });
+      const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
+      const juzNum = getJuzByPage(pageNumber);
+      const built = {
+        surahNumber: sNum,
+        surahName: "سورة " + surahObj.n,
+        pageNumber: pageNumber,
+        juzNumber: juzNum,
+        hizbNumber: Math.ceil(juzNum * 2 - 1),
+        words: words
+      };
+      if (hasFullCache) {
+        try { localStorage.setItem('qpg_full_' + pageNumber, JSON.stringify(built)); } catch (_) {}
+      }
+      return built;
+    }
   }
   return null;
 }
 
 async function fetchPageDataByNumber(pageNumber) {
   if (!FULL_QURAN_CACHE) { try { await loadFullQuranFromStorage(); } catch (_) {} }
-  let pageData = getPageDataFromMemory(pageNumber);
+  let pageData = getPageDataFromMemory(pageNumber, false);
   if (pageData) return pageData;
   try {
     const res = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=text_uthmani,line_number&per_page=50`);
@@ -4891,18 +4974,20 @@ async function fetchPageDataByNumber(pageNumber) {
       }));
     });
     const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
+    const juzNum = getJuzByPage(pageNumber);
     pageData = {
       surahNumber: sNum,
       surahName: "سورة " + surahObj.n,
       pageNumber: pageNumber,
-      juzNumber: surahObj.j,
-      hizbNumber: Math.ceil(surahObj.j * 2 - 1),
+      juzNumber: juzNum,
+      hizbNumber: Math.ceil(juzNum * 2 - 1),
       words: words
     };
-    try { localStorage.setItem('qpg_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
+    try { localStorage.setItem('qpg_full_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
     return pageData;
   } catch (_) {
-    return null;
+    // Offline fallback if network fetch failed
+    return getPageDataFromMemory(pageNumber, true);
   }
 }
 
@@ -6710,25 +6795,57 @@ async function executeQuickNavigatorJump() {
   }
 }
 
-// Render Ajza Tab
+// Render Ajza Tab (All 30 Ajza with exact starting Page, Surah & Ayah)
 function renderAjzaTab() {
   const container = document.getElementById('index-scroll-list');
   let html = '';
-  for (let j = 1; j <= 30; j++) {
-    const s = ALL_SURAHS.find(su => su.j === j) || ALL_SURAHS[0];
+  ALL_AJZA.forEach(jz => {
+    const isAct = currentPage >= jz.p && (jz.j === 30 || currentPage < ALL_AJZA[jz.j].p);
     html += `
-      <div class="surah-item-row" onclick="selectSurah(${s.p})">
-        <div class="surah-number-col">${toArabicNum(j)}</div>
+      <div class="surah-item-row" onclick="selectJuz(${jz.j})" style="${isAct ? 'background-color: #1f2127;' : ''}">
+        <div class="surah-number-col">${toArabicNum(jz.j)}</div>
         <div class="surah-info-col">
-          <div class="surah-item-name">الجزء ${toArabicNum(j)}</div>
-          <div class="surah-item-sub">يبدأ من سورة ${s.n} • ص ${toArabicNum(s.p)}</div>
+          <div class="surah-item-name">الجزء ${toArabicNum(jz.j)}</div>
+          <div class="surah-item-sub">يبدأ من سورة ${jz.n} (الآية ${toArabicNum(jz.a)}) • ص ${toArabicNum(jz.p)}</div>
         </div>
-        <div class="surah-calligraphy-col">جزء ${toArabicNum(j)}</div>
+        <div class="surah-calligraphy-col">جزء ${toArabicNum(jz.j)}</div>
       </div>
     `;
-  }
+  });
   container.innerHTML = html;
 }
+
+async function selectJuz(juzNum) {
+  const jz = ALL_AJZA.find(x => x.j === Number(juzNum)) || ALL_AJZA[0];
+  closeDrawer();
+  await loadMushafPage(jz.p);
+  const idx = currentWordList.findIndex(w => (w.s || jz.s) === jz.s && w.a === jz.a);
+  if (idx >= 0) {
+    currentWordIndex = idx;
+    selectedAyahInfo = { surah: jz.s, ayah: jz.a };
+    renderCurrentPage();
+    autoScrollToCurrentWord(true);
+  }
+}
+
+// Bind Side Quick Index Rail (#side-rail)
+(function bindSideRailEvents() {
+  const rail = document.getElementById('side-rail');
+  if (!rail) return;
+  rail.querySelectorAll('span').forEach((sp, i) => {
+    sp.style.cursor = 'pointer';
+    sp.onclick = (e) => {
+      e.stopPropagation();
+      const num = i + 1;
+      if (activeTab === 'ajza') {
+        selectJuz(Math.min(30, num));
+      } else {
+        const jz = ALL_AJZA.find(x => x.j === Math.min(30, num)) || ALL_AJZA[0];
+        selectSurah(jz.p);
+      }
+    };
+  });
+})();
 
 // Render Bookmarks Tab
 function renderBookmarksTab() {
@@ -7134,12 +7251,12 @@ function executeSearch(query) {
   const numOnly = parseInt(rawQ.replace(/[^\d٠-٩]/g, '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)), 10);
   if (!isNaN(numOnly)) {
     if (cleanQ.includes('جزء') && numOnly >= 1 && numOnly <= 30) {
-      const s = ALL_SURAHS.find(su => su.j === numOnly) || ALL_SURAHS[0];
+      const jz = ALL_AJZA.find(x => x.j === numOnly) || ALL_AJZA[0];
       html += `
-        <div class="surah-item-row" onclick="closeSearch(); loadMushafPage(${s.p});" style="padding: 12px; border-radius: 10px; background: rgba(52, 211, 153, 0.15); border: 1px solid var(--accent-green); margin-bottom: 8px;">
+        <div class="surah-item-row" onclick="closeSearch(); selectJuz(${jz.j});" style="padding: 12px; border-radius: 10px; background: rgba(52, 211, 153, 0.15); border: 1px solid var(--accent-green); margin-bottom: 8px;">
           <div class="surah-info-col">
             <div style="font-weight: 700; color: var(--accent-green); font-size: 15px;">📚 الانتقال إلى الجزء ${toArabicNum(numOnly)}</div>
-            <div style="font-size: 12px; color: var(--text-mute-dark); margin-top: 2px;">يبدأ عند سورة ${s.n} (صفحة ${toArabicNum(s.p)})</div>
+            <div style="font-size: 12px; color: var(--text-mute-dark); margin-top: 2px;">يبدأ عند سورة ${jz.n} الآية ${toArabicNum(jz.a)} (صفحة ${toArabicNum(jz.p)})</div>
           </div>
         </div>
       `;
@@ -7591,11 +7708,124 @@ let quizTimerInterval = null;
 let quizElapsedSeconds = 0;
 let quizTotalRounds = 13;
 
+function populateQuizCustomSelectors() {
+  const jSel = document.getElementById('quiz-custom-juz');
+  const sSel = document.getElementById('quiz-custom-surah');
+  const pInp = document.getElementById('quiz-custom-page');
+  if (jSel && !jSel.options.length) {
+    ALL_AJZA.forEach(jz => {
+      const opt = document.createElement('option');
+      opt.value = String(jz.j);
+      opt.textContent = `الجزء ${toArabicNum(jz.j)} (${jz.n} - ص ${toArabicNum(jz.p)})`;
+      jSel.appendChild(opt);
+    });
+  }
+  if (sSel && !sSel.options.length) {
+    ALL_SURAHS.forEach(su => {
+      const opt = document.createElement('option');
+      opt.value = String(su.s);
+      opt.textContent = `${toArabicNum(su.s)}. سورة ${su.n} (ص ${toArabicNum(su.p)})`;
+      sSel.appendChild(opt);
+    });
+  }
+  if (pInp) pInp.value = String(currentPage);
+  if (jSel) jSel.value = String(getJuzByPage(currentPage));
+  const curSurah = currentWordList[0]?.s || 2;
+  if (sSel) sSel.value = String(curSurah);
+}
+
+function onQuizCustomJuzChange(jVal) {
+  const jz = ALL_AJZA.find(x => x.j === Number(jVal));
+  if (!jz) return;
+  const pInp = document.getElementById('quiz-custom-page');
+  const sSel = document.getElementById('quiz-custom-surah');
+  if (pInp) pInp.value = String(jz.p);
+  if (sSel) sSel.value = String(jz.s);
+}
+
+function onQuizCustomSurahChange(sVal) {
+  const su = ALL_SURAHS.find(x => x.s === Number(sVal));
+  if (!su) return;
+  const pInp = document.getElementById('quiz-custom-page');
+  const jSel = document.getElementById('quiz-custom-juz');
+  if (pInp) pInp.value = String(su.p);
+  if (jSel) jSel.value = String(su.j);
+}
+
+function onQuizCustomPageChange(pVal) {
+  const p = Math.max(1, Math.min(604, parseInt(pVal, 10) || currentPage));
+  const pInp = document.getElementById('quiz-custom-page');
+  const jSel = document.getElementById('quiz-custom-juz');
+  if (pInp) pInp.value = String(p);
+  if (jSel) jSel.value = String(getJuzByPage(p));
+}
+
+async function applyCustomScopeSelectionToPage() {
+  const pInp = document.getElementById('quiz-custom-page');
+  const posSel = document.getElementById('quiz-custom-start-pos');
+  const targetPage = pInp ? Math.max(1, Math.min(604, parseInt(pInp.value, 10) || currentPage)) : currentPage;
+  const posMode = posSel ? posSel.value : 'page_start';
+
+  if (targetPage !== currentPage || !currentWordList.length) {
+    await loadMushafPage(targetPage);
+  }
+  const totalWords = currentWordList.length;
+  let startWordIdx = 0;
+  if (posMode === 'page_mid') {
+    const midIdx = Math.floor(totalWords / 2);
+    const midAyah = currentWordList[midIdx]?.a;
+    const firstOfMid = currentWordList.findIndex(w => w.a === midAyah);
+    startWordIdx = firstOfMid >= 0 ? firstOfMid : midIdx;
+  } else if (posMode === 'page_last_third') {
+    const lastIdx = Math.floor((totalWords * 2) / 3);
+    const lastAyah = currentWordList[lastIdx]?.a;
+    const firstOfLast = currentWordList.findIndex(w => w.a === lastAyah);
+    startWordIdx = firstOfLast >= 0 ? firstOfLast : lastIdx;
+  } else if (posMode === 'selected_ayah' && selectedAyahInfo) {
+    const selIdx = currentWordList.findIndex(w => w.a === selectedAyahInfo.ayah);
+    if (selIdx >= 0) startWordIdx = selIdx;
+  }
+  currentWordIndex = startWordIdx;
+  if (currentWordList[startWordIdx]) {
+    selectedAyahInfo = { surah: currentWordList[startWordIdx].s || 2, ayah: currentWordList[startWordIdx].a };
+  }
+  return { targetPage, startWordIdx };
+}
+
+async function startCustomScopeQuiz() {
+  const { targetPage, startWordIdx } = await applyCustomScopeSelectionToPage();
+  closeMistakesBankModal();
+  const totalWords = currentWordList.length;
+  const startAyah = currentWordList[startWordIdx]?.a || 1;
+  const surahNum = currentWordList[startWordIdx]?.s || 2;
+  quizQueue = [
+    { page: targetPage, surah: surahNum, ayah: startAyah, wordIndex: startWordIdx, directTasmeeCard: true },
+    { page: targetPage, surah: surahNum, ayah: currentWordList[Math.min(totalWords - 1, startWordIdx + 35)]?.a || startAyah, wordIndex: Math.min(totalWords - 1, startWordIdx + 35), directTasmeeCard: true }
+  ];
+  isQuizModeActive = true;
+  currentQuizStep = 0;
+  await launchQuizRoundWithCountdown();
+}
+
+async function startCustomScopeReading() {
+  const { startWordIdx } = await applyCustomScopeSelectionToPage();
+  closeMistakesBankModal();
+  currentWordIndex = startWordIdx;
+  manualWordSelected = startWordIdx > 0;
+  renderCurrentPage();
+  autoScrollToCurrentWord(true);
+  startLivePageRecitationFromDial();
+}
+
 function toggleQuizConfigPanel() {
   const panel = document.getElementById('quiz-mistakes-expand-panel');
   if (panel) {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-    renderMistakesBankList();
+    const willOpen = panel.style.display === 'none';
+    panel.style.display = willOpen ? 'block' : 'none';
+    if (willOpen) {
+      populateQuizCustomSelectors();
+      renderMistakesBankList();
+    }
   }
 }
 
@@ -7615,6 +7845,7 @@ function cycleQuizPassageLength() {
 }
 
 function updateQuizHubDynamicLabels() {
+  populateQuizCustomSelectors();
   const inlineCnt = document.getElementById('saved-mistakes-inline-count');
   if (inlineCnt) inlineCnt.textContent = toArabicNum(savedMistakes.length) || '٠';
 
@@ -7651,17 +7882,36 @@ async function startPassageQuizMode(mode) {
 
   if (mode === 'full_page') {
     quizPassageMode = 'full_page';
-    document.getElementById('quiz-passage-len-lbl').textContent = 'صفحة كاملة';
+    const lbl = document.getElementById('quiz-passage-len-lbl');
+    if (lbl) lbl.textContent = 'صفحة كاملة';
   }
 
-  // Build rounds queue
+  const totalWords = currentWordList.length;
+  const baseStartIdx = (currentWordIndex > 0 && currentWordIndex < totalWords - 4) ? currentWordIndex : 0;
+
+  // Build rounds queue according to mode
   if (mode === 'weakest' && savedMistakes.length > 0) {
     quizQueue = [...savedMistakes];
+  } else if (mode === 'calm_start') {
+    const startAyah = currentWordList[baseStartIdx]?.a || currentWordList[0]?.a || 1;
+    quizQueue = [
+      { page: currentPage, wordIndex: baseStartIdx, ayah: startAyah, directTasmeeCard: true }
+    ];
+  } else if (mode === 'surprise') {
+    const uniqueAyahs = [];
+    currentWordList.forEach((w, idx) => {
+      if (!uniqueAyahs.some(u => u.a === w.a && u.s === w.s)) {
+        uniqueAyahs.push({ s: w.s || 2, a: w.a, firstWordIdx: idx });
+      }
+    });
+    const pick = uniqueAyahs.length > 1 ? uniqueAyahs[Math.floor(Math.random() * uniqueAyahs.length)] : { s: 2, a: 1, firstWordIdx: 0 };
+    quizQueue = [
+      { page: currentPage, surah: pick.s, ayah: pick.a, wordIndex: pick.firstWordIdx, directTasmeeCard: true }
+    ];
   } else {
-    const totalWords = currentWordList.length;
     const third = Math.max(1, Math.floor(totalWords / 3));
     quizQueue = [
-      { page: currentPage, wordIndex: 0, startFromPageBeginning: true },
+      { page: currentPage, wordIndex: baseStartIdx, startFromPageBeginning: baseStartIdx === 0 },
       { page: currentPage, wordIndex: Math.min(third, totalWords - 1), startFromPageBeginning: false },
       { page: currentPage, wordIndex: Math.min(third * 2, totalWords - 1), startFromPageBeginning: false }
     ];
