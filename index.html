@@ -1093,6 +1093,15 @@ html[data-theme="light"] .w.ayah-playing {
   stroke-width: 2.2 !important;
   filter: drop-shadow(0 0 6px rgba(245, 196, 81, 0.65));
 }
+.ayah-num-recited svg {
+  stroke: var(--accent-green) !important;
+  stroke-width: 2.2 !important;
+  filter: drop-shadow(0 0 6px var(--accent-green-glow));
+}
+.ayah-num-recited span {
+  color: var(--accent-green) !important;
+  font-weight: 800;
+}
 
 /* Floating Sheikh Audio Player Control Bar */
 .sheikh-audio-player-bar {
@@ -1926,31 +1935,34 @@ html[data-theme="light"] .player-ctrl-btn {
 .q-assist-capsule {
   display: inline-flex;
   align-items: center;
-  background-color: #21242b;
-  border: 1px solid #383c47;
+  gap: 6px;
+  background-color: #23262d;
+  border: 1px solid #343844;
   border-radius: 9999px;
-  padding: 2px;
+  padding: 3px 6px;
 }
 .q-assist-btn {
-  width: 42px;
+  width: 38px;
   height: 38px;
-  border-radius: 9999px;
+  border-radius: 50%;
   border: none;
   background: transparent;
   color: #e5e7eb;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
 }
 .q-assist-btn:active {
   background-color: rgba(255, 255, 255, 0.14);
+  transform: scale(0.92);
 }
 .q-assist-btn.bordered-circle {
-  border: 1px solid #4b5563;
+  border: 1.5px solid #6b7280;
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .q-stop-square-fab {
@@ -3937,16 +3949,16 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
           <div class="q-lines-container" id="q-lines-container"></div>
         </div>
 
-        <!-- Card Footer: Surah & Ayah on Right, Eye-Slash Reveal All Toggle on Left (Matching Image 2) -->
+        <!-- Card Footer: Eye-Slash on physical Right (RTL start), Surah & Ayah on physical Left (RTL end) — Exact match to Image_314bc4 -->
         <div class="q-card-footer" dir="rtl">
-          <div style="text-align:right;" dir="rtl">
-            <div class="q-card-surah-title" id="q-card-surah-title">البقرة ٢</div>
-            <div class="q-card-ayah-sub" id="q-card-ayah-sub">الآية ١٨٠ ☾</div>
-          </div>
-
           <button class="icon-btn" onclick="toggleRevealAllQuizCard()" title="إظهار / إخفاء النص بالكامل" style="color:#ffffff;">
             <svg viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.804 11.804 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27z"/></svg>
           </button>
+
+          <div style="text-align:left;" dir="rtl">
+            <div class="q-card-surah-title" id="q-card-surah-title">البقرة ٢</div>
+            <div class="q-card-ayah-sub" id="q-card-ayah-sub">الآية ١٨٠ ☾</div>
+          </div>
         </div>
       </div>
     </div>
@@ -3956,7 +3968,7 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
   <div class="q-round-info-wrap">
     <div class="q-round-labels-row">
       <span id="q-round-counter-lbl">الجولة : ١ من ١٣</span>
-      <span id="q-round-range-lbl">البقرة ١٦٤ - ١٦٩</span>
+      <span id="q-round-range-lbl">البقرة ١٧٧ - ١٨٨</span>
     </div>
     <div class="q-round-dashes-row" id="q-round-dashes-row">
       <!-- 13 dashes -->
@@ -3968,40 +3980,40 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
     </div>
   </div>
 
-  <!-- Bottom Controls: Green Square Stop FAB on Right + Status Pills & Assist Arrows on Left -->
+  <!-- Bottom Controls: Green Square Stop FAB on Right + Status Pills & Assist Arrows on Left (Exact match to Image_314bc4) -->
   <div class="q-session-bottom-bar">
     <!-- Right Side (in RTL start): Glowing Green FAB with White Stop Square -->
-    <button class="q-stop-square-fab" onclick="exitDedicatedQuizSession()" title="إيقاف وإنهاء جلسة الاختبار">
+    <button class="q-stop-square-fab" onclick="exitDedicatedQuizSession()" title="إيقاف وإنهاء جلسة التسميع">
       <div class="q-stop-inner-square"></div>
     </button>
 
-    <!-- Left Side (in RTL end): Status Pills + Assist Arrows ([<<] Full Ayah, [<] Few Words, [Eye-slash] Reveal, [|<] Next Round) -->
+    <!-- Left Side (in RTL end): Status Pills + Assist Arrows -->
     <div class="q-left-controls-col">
-      <!-- 4 Mini Status Pills -->
+      <!-- 4 Mini Status Pills: from right-to-left in RTL: [Timer + Pink Dot] [Flame + •] [%100 Green] [Head + •] -->
       <div class="q-status-pills-row">
         <div class="q-mini-pill">
-          <span style="width:9px;height:9px;border-radius:50%;background:#f87171;display:inline-block;"></span>
           <span id="q-timer-lbl">٠٠:٠٤</span>
+          <span style="width:9px;height:9px;border-radius:50%;background:#e8798e;display:inline-block;"></span>
         </div>
         <div class="q-mini-pill">
-          <span>🔥</span>
-          <span id="q-streak-lbl">٠</span>
+          <span id="q-streak-lbl">•</span>
+          <svg style="width:14px;height:14px;fill:#d1d5db;" viewBox="0 0 24 24"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>
         </div>
-        <div class="q-mini-pill green-pct" id="q-accuracy-lbl">٪١٠٠</div>
+        <div class="q-mini-pill green-pct" id="q-accuracy-lbl">%١٠٠</div>
         <div class="q-mini-pill">
-          <span>🧠</span>
-          <span id="q-err-cnt-lbl">٠</span>
+          <span id="q-err-cnt-lbl">•</span>
+          <svg style="width:15px;height:15px;fill:#ffffff;" viewBox="0 0 24 24"><path d="M12 2C7.58 2 4 5.58 4 10c0 2.03.76 3.87 2 5.28V19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2v-3.72c1.24-1.41 2-3.25 2-5.28 0-4.42-3.58-8-8-8zm-1.06 11.5L7.4 10l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41-5.64 5.62z"/></svg>
         </div>
       </div>
 
-      <!-- Step Assist Buttons Row (Matching Image_8f3717.jpg) -->
+      <!-- Step Assist Buttons Row (Matching Image_314bc4.png) -->
       <div class="q-assist-buttons-row" id="q-assist-buttons-row">
         <div class="q-assist-capsule">
-          <!-- (<<) Double Arrow: Reveal / Advance Complete Ayah -->
+          <!-- (<<) Double Arrow in Circle: Reveal / Advance Complete Ayah -->
           <button class="q-assist-btn bordered-circle" onclick="quizAssistStep('full_ayah')" title="إظهار وتسميع آية كاملة (<<)">
             &laquo;
           </button>
-          <!-- (<) Single Arrow: Reveal / Hint Next 2 Words -->
+          <!-- (<) Single Arrow in Circle: Reveal / Hint Next 2 Words -->
           <button class="q-assist-btn bordered-circle" onclick="quizAssistStep('few_words')" title="مساعدة: إظهار الكلمات التالية (<)">
             &lsaquo;
           </button>
@@ -4124,7 +4136,7 @@ if (window.Tasmee) {
       window.__sr = this;
     }
     start() {
-      const off = !navigator.onLine || (document.getElementById('cfg-offline-recite') && document.getElementById('cfg-offline-recite').checked);
+      const off = !navigator.onLine;
       Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: off, partialResults: true }));
     }
     stop() {
@@ -4280,17 +4292,23 @@ const toArabicNum = n => {
 const normArabic = s => {
   if (!s) return '';
   return String(s)
-    .replace(/\u0640\u0670/g, 'ا')
-    .replace(/\u0670/g, 'ا')
+    .replace(/\u0640?\u06E7/g, 'ي')
     .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06ED\u0640۞۩ۚۖۗۛۜ]/g, '')
+    .replace(/و\u0670(?=ة|ه|ا)/g, 'ا')
+    .replace(/ى\u0670(?=\s|$)/g, 'ى')
+    .replace(/ى\u0670/g, 'ا')
+    .replace(/\u0670/g, 'ا')
     .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ءا/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه')
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .replace(/اليل/g, 'الليل')
     .replace(/[^\u0621-\u064A\s]/g, '')
+    .replace(/(.)\1{2,}/g, '$1$1')
     .replace(/ا+/g, 'ا')
+    .replace(/ي+/g, 'ي')
     .replace(/\s+/g, ' ')
     .trim();
 };
@@ -4651,13 +4669,17 @@ function getAudioContext() {
   return audioContext;
 }
 
-// Trigger Physical Phone Vibration (Both Web Vibration API & Native Flutter HapticFeedback Bridge)
+let totalBellChimesPlayed = 0;
+let totalVibrationsTriggered = 0;
+
+// Trigger Physical Phone Vibration Synchronized with Bell Chime (Web Vibration API & Native Flutter Bridge)
 function triggerErrorVibration() {
   const vibCfg = document.getElementById('cfg-vibrate-on-error');
   if (vibCfg && !vibCfg.checked) return;
+  totalVibrationsTriggered++;
   try {
-    if (navigator.vibrate) {
-      navigator.vibrate([220, 70, 260]);
+    if (navigator && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(95);
     }
   } catch (_) {}
   try {
@@ -4667,40 +4689,37 @@ function triggerErrorVibration() {
   } catch (_) {}
 }
 
-// High-Volume, Crystal-Clear Error Bell Chime & Completion Chime (Boosted with DynamicsCompressor + Dual Harmonics)
+// Gentle, Non-Intrusive Error Bell Chime & Completion Chime
 function playBellAlert(type) {
   const bellCfg = document.getElementById('cfg-bell-sound');
   if (bellCfg && !bellCfg.checked) return;
+  if (type === 'err') totalBellChimesPlayed++;
   try {
     const ctx = getAudioContext();
     const t = ctx.currentTime;
 
-    // Master DynamicsCompressor to boost loudness safely without clipping
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-14, t);
-    compressor.knee.setValueAtTime(10, t);
-    compressor.ratio.setValueAtTime(6, t);
-    compressor.attack.setValueAtTime(0.002, t);
-    compressor.release.setValueAtTime(0.15, t);
+    compressor.threshold.setValueAtTime(-18, t);
+    compressor.knee.setValueAtTime(12, t);
+    compressor.ratio.setValueAtTime(4, t);
+    compressor.attack.setValueAtTime(0.003, t);
+    compressor.release.setValueAtTime(0.12, t);
     compressor.connect(ctx.destination);
 
     if (type === 'err') {
-      // Loud, unmistakable double-strike resonant error bell chime
-      const strikes = [0, 0.16];
-      strikes.forEach(offset => {
-        [[587.33, 0.95, 'triangle'], [880, 0.90, 'sine'], [1760, 0.65, 'sine'], [2637, 0.40, 'triangle']].forEach(([freq, gainVal, wave]) => {
-          const osc = ctx.createOscillator();
-          const g = ctx.createGain();
-          osc.type = wave;
-          osc.frequency.setValueAtTime(freq, t + offset);
-          g.gain.setValueAtTime(0.001, t + offset);
-          g.gain.exponentialRampToValueAtTime(gainVal, t + offset + 0.008);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.65);
-          osc.connect(g);
-          g.connect(compressor);
-          osc.start(t + offset);
-          osc.stop(t + offset + 0.68);
-        });
+      // Gentle, simple, soft single bell chime (called 3 times by ringErrorBellForMany)
+      [[659.25, 0.28, 'sine'], [987.77, 0.14, 'sine']].forEach(([freq, gainVal, wave]) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = wave;
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.exponentialRampToValueAtTime(gainVal, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        osc.connect(g);
+        g.connect(compressor);
+        osc.start(t);
+        osc.stop(t + 0.24);
       });
     } else if (type === 'start') {
       [[523.25, 0.6], [783.99, 0.6]].forEach(([freq, gainVal], i) => {
@@ -5028,9 +5047,10 @@ function renderCurrentPage() {
 
     currentWordList.forEach((w, j) => {
       const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
-      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''} ${j === currentWordIndex && isReciting ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${w.t}</span> `;
+      const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
+      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${w.t}</span> `;
       if (w.end) {
-        html += `<span class="ayah-num-dark" onclick="selectAyahOnPage(${w.s || 2}, ${w.a}, ${j})">
+        html += `<span class="ayah-num-dark" data-ayah-s="${w.s || 2}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${w.s || 2}, ${w.a})">
           <svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14"/>
             <path d="M18 1 L20 4 L16 4 Z M18 35 L20 32 L16 32 Z"/>
@@ -5076,9 +5096,10 @@ function renderCurrentPage() {
     currentWordList.forEach((w, j) => {
       const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
       const wordHtml = w.h || w.t;
-      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''} ${j === currentWordIndex && isReciting ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${wordHtml}</span> `;
+      const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
+      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${wordHtml}</span> `;
       if (w.end) {
-        html += `<span class="ayah-num-light" onclick="selectAyahOnPage(${w.s || 3}, ${w.a}, ${j})">
+        html += `<span class="ayah-num-light" data-ayah-s="${w.s || 3}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${w.s || 3}, ${w.a})">
           <svg viewBox="0 0 36 36">
             <circle cx="18" cy="18" r="14"/>
             <path d="M18 1 L20 4 L16 4 Z M18 35 L20 32 L16 32 Z"/>
@@ -5135,10 +5156,18 @@ function bindWordEvents() {
       if (!w) return;
       // If actively reciting, clicking any word moves the recitation pointer directly to that word!
       if (isReciting) {
+        clearTimeout(interimMistakeTimer);
+        pendingMismatchFn = null;
         startLocked = true;   // a manual tap always wins over the automatic search
+        manualWordSelected = true;
         currentWordIndex = idx;
+        selectedAyahInfo = { surah: w.s || (currentPage === 62 ? 3 : 2), ayah: w.a };
         haltError = null;
+        haltAheadHits = 0;
         lastProcessedTokenCount = 0;
+        prevTokenList = [];
+        latestTokenList = [];
+        utterEpoch++;
         const bar = document.getElementById('halt-alert-bar');
         if (bar) bar.style.display = 'none';
         renderCurrentPage();
@@ -5265,17 +5294,14 @@ function updateProgressBadge() {
 // ==========================================================================
 const btnRecite = document.getElementById('btn-toggle-recite');
 
-// Direct click on Main Mic Button starts/stops recitation immediately!
+// Clicking the Main Green FAB opens/closes the Speed-Dial Menu (استمع / تلاوة / اختبار) matching Image_314b0a.jpg!
 btnRecite.onclick = () => {
   if (isReciting) {
     stopRecitation();
   } else if (isAudioPlaying && audioPlayer) {
     toggleAudioRecitation();
-  } else if (isFabMenuOpen) {
-    closeFabSpeedDial();
-    startRecitation();
   } else {
-    startRecitation();
+    toggleFabSpeedDial();
   }
 };
 
@@ -5339,14 +5365,21 @@ function updateLiveReciteMonitorUI(heardSnippet) {
   if (!isReciting) return;
 
   advancePastPauseMarks();
-  const expWord = currentWordList[currentWordIndex]?.t || 'تمت الصفحة';
+  const curObj = currentWordList[currentWordIndex];
+  const expWord = curObj?.t || 'تمت الصفحة';
   const expEl = document.getElementById('live-expected-word-lbl');
-  if (expEl) expEl.textContent = expWord;
-
   const statusEl = document.getElementById('live-mic-status-lbl');
-  if (statusEl) {
-    const modeTag = stopOnErrorMandatory ? '(يتوقف عند الخطأ)' : '(يتخطى الخطأ)';
-    statusEl.textContent = `🎤 يستمع ${modeTag} — اقرأ:`;
+
+  if (!startLocked && !isQuizModeActive && !manualWordSelected) {
+    if (expEl) expEl.textContent = 'أي آية أو موضع في الصفحة';
+    if (statusEl) statusEl.textContent = '🎤 يستمع الآن — ابدأ القراءة من:';
+  } else {
+    if (expEl) expEl.textContent = expWord;
+    if (statusEl) {
+      const ayahTag = curObj && curObj.a ? `الآية ${toArabicNum(curObj.a)}` : '';
+      const modeTag = stopOnErrorMandatory ? '(يتوقف عند الخطأ)' : '(يستمر بعد الخطأ)';
+      statusEl.textContent = `🎤 ${ayahTag ? ayahTag + ' ' : ''}${modeTag} — اقرأ:`;
+    }
   }
 
   if (heardSnippet !== undefined) {
@@ -5354,7 +5387,7 @@ function updateLiveReciteMonitorUI(heardSnippet) {
     if (prevEl) {
       prevEl.textContent = heardSnippet
         ? `💬 ما سمعه الميكروفون: « ${heardSnippet} »`
-        : '💬 بانتظار قراءتك... (تحدث بصوت واضح في الميكروفون)';
+        : '💬 اقرأ من أي موضع في الصفحة (أو اضغط على أي كلمة/آية للبدء منها)...';
     }
   }
 }
@@ -5384,25 +5417,13 @@ function submitQuickLiveInput() {
   processRecitedText(text, true);
 }
 
-// Central Mistake Handler: Marks RED + Rings Bell + Counts Error + Stops or Skips based on mode
+let pendingMismatchFn = null;
+
+// Central Mistake Handler: Marks RED + Rings Bell + Counts Error + Strictly Stops or Continues based on stopOnErrorMandatory
 function triggerMistakeOnCurrentWord(spokenToken) {
   if (currentWordIndex >= currentWordList.length) return;
-  if (initialGrace > 0 && !isQuizModeActive) { initialGrace--; return; }
-  // Second chance: other ASR hypotheses may contain the correct word -> not a mistake
-  if (altSaysCorrect(currentWordList[currentWordIndex]?.t || '')) {
-    clearTimeout(interimMistakeTimer);
-    wordStates[currentWordIndex] = 'ok';
-    haltError = null;
-    haltAheadHits = 0;
-    const hb0 = document.getElementById('halt-alert-bar');
-    if (hb0) hb0.style.display = 'none';
-    currentWordIndex++;
-    advancePastPauseMarks();
-    if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return; }
-    refreshActiveViewsAfterStep();
-    return;
-  }
   clearTimeout(interimMistakeTimer);
+  pendingMismatchFn = null;
 
   const currentObj = currentWordList[currentWordIndex];
   const currentExpected = currentObj?.t || '';
@@ -5487,15 +5508,23 @@ async function prepareOfflineAll() {
   if (st) st.textContent = 'جاهز بدون إنترنت';
 }
 
+let resumeCandidateIdx = -1;
+let pendingSmartTokens = [];
+let pendingSmartTime = 0;
+
 function startRecitation() {
   getAudioContext();
   initialGrace = 0;
-  // resume after a pause: same page, same pointer -> keep errors / progress, do not restart the search
+  pendingSmartTokens = [];
+  pendingSmartTime = 0;
+  pendingMismatchFn = null;
+  // resume after a pause: same page, same pointer -> keep errors / progress, AND still allow starting from another place on the page if the user reads elsewhere!
   const resuming = !isReciting && !isQuizModeActive && currentWordIndex > 0 && lastStopInfo &&
     lastStopInfo.page === currentPage && lastStopInfo.idx === currentWordIndex && wordStates.length === currentWordList.length;
+  resumeCandidateIdx = resuming ? currentWordIndex : -1;
   if (!isReciting && !isQuizModeActive) {
-    // Search automatically across the page unless user explicitly clicked "ابدأ التسميع من هنا" or is resuming
-    startLocked = !smartStartEnabled || (manualWordSelected && currentWordIndex > 0) || resuming;
+    // Search automatically across the page unless user explicitly clicked "ابدأ التسميع من هنا"
+    startLocked = !smartStartEnabled || (manualWordSelected && currentWordIndex >= 0);
     smartStartWaitTokens = 0;
   }
   if (!isReciting && !isQuizModeActive && !resuming) {
@@ -5506,6 +5535,8 @@ function startRecitation() {
     wordErrors = [];
     bellRingCount = {};
     haltError = null;
+    const hbInit = document.getElementById('halt-alert-bar');
+    if (hbInit) hbInit.style.display = 'none';
     wordStates = currentWordList.map(() => 'pending');
     clearReplayState();
     pageProgressed = false;
@@ -5621,13 +5652,23 @@ function startRecitation() {
   };
 
   recognitionEngine.onend = () => {
+    if (pendingMismatchFn) {
+      clearTimeout(interimMistakeTimer);
+      const fn = pendingMismatchFn;
+      pendingMismatchFn = null;
+      try { fn(); } catch (_) {}
+    }
+    if (!startLocked && latestTokenList && latestTokenList.length > 0) {
+      pendingSmartTokens = [...pendingSmartTokens, ...latestTokenList].slice(-5);
+      pendingSmartTime = Date.now();
+    }
     lastProcessedTokenCount = 0; prevTokenList = []; utterEpoch++; advanceBaseCount = 0; pendingAdvanceText = '';
     if (isReciting) {
       setTimeout(() => {
         if (isReciting && recognitionEngine) {
           try { recognitionEngine.start(); } catch (_) {}
         }
-      }, 120);
+      }, window.Tasmee ? 35 : 90);
     }
   };
 
@@ -5674,62 +5715,44 @@ function autoScrollToCurrentWord(force) {
 }
 
 const SHORT_PARTICLES = new Set([
-  'في', 'من', 'ما', 'وما', 'بما', 'مما', 'عما', 'لا', 'ولا', 'ان', 'وان', 'بها', 'به', 'له', 'لهم', 'كم', 'عن', 'علي', 'ام', 'او', 'بل', 'قد', 'هل', 'اذ', 'لو', 'هم', 'يا', 'ماء'
+  'في', 'من', 'ما', 'لا', 'ان', 'به', 'له', 'عن', 'ام', 'او', 'بل', 'قد', 'هل', 'اذ', 'لو', 'هم', 'يا'
 ]);
 
-// Deep Uthmani-to-Phonetic Normalizer (handles واو الجماعة، الألف الخنجرية، الهمزات، الإدغام)
+// Deep Uthmani-to-Phonetic Normalizer (handles واو الجماعة، الألف الخنجرية، الهمزات)
 function normPhoneticTajweed(s) {
   let n = normArabic(s);
   if (!n) return '';
   return n
+    .replace(/\s+/g, '')
     .replace(/وا$/g, 'و')       // Uthmani plural waw+alif (امنوا -> امنو)
     .replace(/^يايها/g, 'ياايها')
-    .replace(/من م/g, 'مم')     // Idgham: من ماء -> مماء
-    .replace(/من ن/g, 'نن')
-    .replace(/من ر/g, 'رر')
-    .replace(/من ل/g, 'لل')
-    .replace(/من و/g, 'مو')
-    .replace(/من ي/g, 'مي')
     .replace(/[ءئؤا]/g, '')     // Consonantal skeleton without alifs/hamzas (يتساءلون /ءامنوا / السموت)
     .trim();
 }
 
 function isWordMatch(spokenToken, expectedWord) {
   if (!spokenToken || !expectedWord) return false;
-  const normA = normArabic(spokenToken);
-  const normB = normArabic(expectedWord);
+  const normA = normArabic(spokenToken).replace(/\s+/g, '');
+  const normB = normArabic(expectedWord).replace(/\s+/g, '');
   if (!normA || !normB) return false;
   if (normA === normB) return true;
+  if (normA.replace(/و+/g, 'و') === normB.replace(/و+/g, 'و')) return true;
 
-  // Handle Uthmani silent trailing alif or waw-alif differences (e.g. اتبعوا / تبرءوا / كلوا)
+  // Handle Uthmani silent trailing alif (واو الجماعة أو تنوين الفتح عند الوقف) or Uthmani omitted final yaa (الداع/الداعي، دعان/دعاني)
   if (normA.replace(/ا$/g, '') === normB.replace(/ا$/g, '')) return true;
+  if (Math.min(normA.length, normB.length) >= 3 && normA.replace(/ي$/g, '') === normB.replace(/ي$/g, '')) return true;
 
-  // Handle common attached prefixes (و / ف / ب / ل / ك)
-  if (normB.length >= 2 && (normB === 'و' + normA || normB === 'ف' + normA || normB === 'ب' + normA || normB === 'ل' + normA || normB === 'م' + normA)) return true;
-  if (normA.length >= 2 && (normA === 'و' + normB || normA === 'ف' + normB || normA === 'ب' + normB || normA === 'ل' + normB || normA === 'م' + normB)) return true;
+  // Handle Uthmani internal omitted alifs (e.g. السموت/السماوات، الصبرين/الصابرين، خلدين/خالدين، معدودت/معدودات، هؤلأ/هؤلاء)
+  const skelA = normSkeleton(spokenToken).replace(/\s+/g, '');
+  const skelB = normSkeleton(expectedWord).replace(/\s+/g, '');
+  if (skelA && skelB && skelA.length >= 2 && skelA === skelB) return true;
 
-  // Handle definite article (ال) dropped or assimilated in connected speech (في الأرض -> فالارض / الارض)
-  if (normB.startsWith('ال') && normA === normB.slice(2)) return true;
-  if (normB.startsWith('وال') && (normA === normB.slice(1) || normA === normB.slice(3))) return true;
-
-  const skelA = normSkeleton(spokenToken);
-  const skelB = normSkeleton(expectedWord);
-  if (skelA && skelB && skelA === skelB) return true;
-
+  // Handle Uthmani hamza/alif seat variations (e.g. يتساءلون/يتسالون، رؤوف/رءوف، يايها/يا أيها) only when all consonants match 100%
   const phonA = normPhoneticTajweed(spokenToken);
   const phonB = normPhoneticTajweed(expectedWord);
-  if (phonA && phonB && phonA.length >= 2 && phonB.length >= 2) {
-    if (phonA === phonB) return true;
-    if (phonA.length >= 3 && phonB.length >= 3 && (phonB.includes(phonA) || phonA.includes(phonB))) return true;
-  }
+  if (phonA && phonB && phonA.length >= 3 && phonA === phonB && normA[0] === normB[0]) return true;
 
-  const minLen = Math.min(normA.length, normB.length);
-  const threshold = minLen <= 2 ? 0.75 : (minLen === 3 ? 0.66 : (minLen >= 6 ? 0.55 : 0.60));
-
-  const score1 = simScore(normA, normB);
-  const score2 = simScore(skelA, skelB);
-  const score3 = (phonA && phonB) ? simScore(phonA, phonB) : 0;
-  return Math.max(score1, score2, score3) >= threshold;
+  return false;
 }
 
 function isQuranPauseMark(txt) {
@@ -5801,8 +5824,10 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   const sm = (i, j) => {
     const t = tokens[i], w = wordTexts[live[j]];
     if (strictFn(t, w)) return MATCH;
-    const a = normArabic(t), b = normArabic(w);
-    if (a.length >= 3 && b.length >= 3 && simFn(a, b) >= 0.76) return FUZZY;
+    if (w && w.indexOf(' ') >= 0) {
+      if (i + 1 < T && strictFn(t + tokens[i + 1], w)) return MATCH;
+      if (i > 0 && strictFn(tokens[i - 1] + t, w)) return MATCH;
+    }
     return MIS;
   };
   for (let i = 0; i <= T; i++) { H.push(new Array(W + 1).fill(0)); B.push(new Array(W + 1).fill(0)); }
@@ -5857,7 +5882,12 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
       ? { state: 'ambiguous', score: best.v }
       : { state: 'wait', reason: 'ambiguous', score: best.v };
   }
-  const first = live[pairs[0][1]], last = live[pairs[pairs.length - 1][1]];
+  let cleanPairs = pairs;
+  const negIdx = pairs.findIndex(p => p[2] <= 0);
+  if (negIdx >= 2) {
+    cleanPairs = pairs.slice(0, negIdx);
+  }
+  const first = live[cleanPairs[0][1]], last = live[cleanPairs[cleanPairs.length - 1][1]];
   const matched = [];
   for (let idx = first; idx <= last; idx++) {
     if (!isQuranPauseMark(wordTexts[idx])) matched.push(idx);
@@ -5865,7 +5895,7 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   return {
     state: 'locked', score: best.v, strict: strictPairs.length,
     firstWord: first, lastWord: last, matched,
-    consumedTokens: pairs[pairs.length - 1][0] + 1
+    consumedTokens: cleanPairs[cleanPairs.length - 1][0] + 1
   };
 }
 // <SMART_START_END>
@@ -5916,11 +5946,19 @@ function smartStatus(msg) {
 function applySmartStart(r) {
   r.matched.forEach(k => { if (!isQuranPauseMark(currentWordList[k]?.t)) wordStates[k] = 'ok'; });
   startLocked = true;
+  pageProgressed = true;
+  resumeCandidateIdx = -1;
+  pendingSmartTokens = [];
   initialGrace = 0; haltError = null; haltAheadHits = 0;
+  const hb = document.getElementById('halt-alert-bar');
+  if (hb) hb.style.display = 'none';
   currentWordIndex = r.lastWord + 1;
   advancePastPauseMarks();
   const w = currentWordList[r.firstWord];
-  smartStatus('🎯 تم تحديد بداية التلاوة تلقائياً' + (w ? ' من: ' + w.t : ''));
+  if (w) {
+    selectedAyahInfo = { surah: w.s || (currentPage === 62 ? 3 : 2), ayah: w.a };
+  }
+  smartStatus('🎯 تم تحديد موضع التلاوة تلقائياً' + (w ? ` (الآية ${toArabicNum(w.a)}: ${w.t})` : ''));
   if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(r.consumedTokens); return false; }
   refreshActiveViewsAfterStep();
   return true;
@@ -5928,23 +5966,11 @@ function applySmartStart(r) {
 
 let lastProcessedTokenCount = 0;
 let haltAheadHits = 0;
-let initialGrace = 2; // first mismatching tokens after start are ignored (user may begin anywhere on the page)
+let initialGrace = 0;
 
-// Strict word comparison (no fuzzy similarity). Used for every decision that MOVES the reading
-// position (rewind / resync), so a mis-heard or wrong word can never make the pointer jump around.
+// Strict word comparison (no fuzzy similarity).
 function isStrictMatch(spoken, expected) {
-  if (!spoken || !expected) return false;
-  const a = normArabic(spoken), b = normArabic(expected);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.replace(/ا$/, '') === b.replace(/ا$/, '')) return true;
-  if (b.length >= 3 && (b === 'و' + a || b === 'ف' + a || b === 'ب' + a || b === 'ل' + a)) return true;
-  if (a.length >= 3 && (a === 'و' + b || a === 'ف' + b || a === 'ب' + b || a === 'ل' + b)) return true;
-  if (b.startsWith('ال') && b.length >= 5 && a === b.slice(2)) return true;
-  const sa = normSkeleton(spoken), sb = normSkeleton(expected);
-  if (sa && sb && sa.length >= 2 && sa === sb) return true;
-  const pa = normPhoneticTajweed(spoken), pb = normPhoneticTajweed(expected);
-  return !!(pa && pb && pa.length >= 2 && pa === pb);
+  return isWordMatch(spoken, expected);
 }
 
 // ==========================================================================
@@ -5988,9 +6014,10 @@ function ringErrorBellForMany(page, idxs) {
   fresh.forEach(k => { bellRingCount[page + ':' + k] = BELL_MAX_PER_WORD; });
   const now = Date.now();
   const startAt = Math.max(now, bellBusyUntil);           // never overlap two bursts: queue behind the previous one
-  bellBusyUntil = startAt + BELL_MAX_PER_WORD * 950;
+  const stepMs = 260;
+  bellBusyUntil = startAt + BELL_MAX_PER_WORD * stepMs;
   for (let r = 0; r < BELL_MAX_PER_WORD; r++) {
-    const delay = startAt - now + r * 950;
+    const delay = startAt - now + r * stepMs;
     const fire = () => { try { playBellAlert('err'); triggerErrorVibration(); } catch (_) {} };
     if (delay <= 0) fire(); else setTimeout(fire, delay);
   }
@@ -6017,15 +6044,9 @@ function bestHeardScore(token, expected) {
   }
   return best;
 }
-// The reader probably said the word right and the recognizer only heard it badly:
-// the sound is close AND he carried on correctly with the next word (or he is reading fast and it is very close).
+// Never auto-correct or replace a non-matching spoken word:
 function isRecognizerSlip(token, expected, nextToken, nextExpected) {
-  if (normArabic(expected).length < 4) return false;              // short words must match properly
-  const sc = bestHeardScore(token, expected);
-  const fast = isFastSpeech();
-  const continued = !!(nextToken && nextExpected && isWordMatch(nextToken, nextExpected));
-  if (continued && sc >= (fast ? 0.40 : 0.50)) return true;
-  return fast && sc >= 0.62;
+  return false;
 }
 function acceptCurrentWordAsHeard() {
   clearTimeout(interimMistakeTimer);
@@ -6228,6 +6249,10 @@ function isPartialOfExpected(token, expected) {
 }
 
 function refreshActiveViewsAfterStep() {
+  if (isReciting && !isQuizModeActive && startLocked && currentWordList[currentWordIndex]) {
+    const cw = currentWordList[currentWordIndex];
+    selectedAyahInfo = { surah: cw.s || (currentPage === 62 ? 3 : 2), ayah: cw.a };
+  }
   renderCurrentPage();
   autoScrollToCurrentWord(false);
   updateLiveReciteMonitorUI();
@@ -6236,31 +6261,29 @@ function refreshActiveViewsAfterStep() {
   }
 }
 
-// Mismatch that stayed the same long enough: replay? skipped words? otherwise it is a real mistake.
+// Mismatch that stayed the same long enough: replay? or trigger mistake directly (never auto-correct!).
 function resolveMismatch(prevToken, token, prevPrevToken) {
   const rp = detectReplayTarget(prevToken, token, null, true);
   if (rp >= 0) { applyRewindToIndex(rp); return; }
-  const j = findJumpIndex(prevToken, token, null, null, prevPrevToken, false);
-  if (j >= 0) { doJump(j); return; }
-  if (isRecognizerSlip(token, currentWordList[currentWordIndex]?.t || '', null, '')) {
-    acceptCurrentWordAsHeard();
-    if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return; }
-    refreshActiveViewsAfterStep();
-    return;
+  if (!stopOnErrorMandatory) {
+    const j = findJumpIndex(prevToken, token, null, null, prevPrevToken, false);
+    if (j >= 0) { doJump(j); return; }
   }
   triggerMistakeOnCurrentWord(token);
 }
-// Wait until the recognizer stops changing the word before judging it.
+// Wait briefly if interim token is still being articulated, then judge it (and flush immediately if onend fires).
 function scheduleMismatchCheck(gi, token, prevToken, prevPrevToken) {
   clearTimeout(interimMistakeTimer);
   const capIdx = currentWordIndex, epoch = utterEpoch;
-  const waitMs = isFastSpeech() ? 500 : 1000;
-  interimMistakeTimer = setTimeout(() => {
+  const waitMs = isFastSpeech() ? 350 : 550;
+  pendingMismatchFn = () => {
+    pendingMismatchFn = null;
     if (!isReciting || epoch !== utterEpoch || currentWordIndex !== capIdx) return;
     if (latestTokenList[gi] !== token) return;
     lastProcessedTokenCount = Math.max(lastProcessedTokenCount, gi + 1);
     resolveMismatch(prevToken, token, prevPrevToken);
-  }, waitMs);
+  };
+  interimMistakeTimer = setTimeout(pendingMismatchFn, waitMs);
 }
 
 // Where do the new words of this recognizer event start?  Works for cumulative text (browser) AND
@@ -6283,22 +6306,112 @@ function processRecitedText(text, isFinal) {
   if (currentWordIndex >= currentWordList.length) return;
 
   const rawTokens = normArabic(text).split(/\s+/).filter(Boolean);
-  const tokens = normalizeTokenStream(rawTokens);
+  let tokens = normalizeTokenStream(rawTokens);
   if (!tokens.length) return;
+
+  // Strip leading Isti'adhah ("أعوذ بالله من الشيطان الرجيم") and Basmalah ("بسم الله الرحمن الرحيم")
+  // when they are not the actual words on the current page, so reciting them before an ayah never causes false matches or errors!
+  if (!isQuizModeActive) {
+    const pageHasAudhu = currentWordList.some(w => normArabic(w.t) === 'اعوذ');
+    const pageHasBasmalah = currentWordList.some(w => normArabic(w.t) === 'بسم');
+    let stripCount = 0;
+    if (!pageHasAudhu && tokens[0] === 'اعوذ') {
+      const istSet = new Set(['اعوذ', 'بالله', 'السميع', 'العليم', 'من', 'الشيطان', 'الرجيم']);
+      while (stripCount < tokens.length && istSet.has(tokens[stripCount])) {
+        const tok = tokens[stripCount++];
+        if (tok === 'الرجيم') break;
+      }
+    }
+    if (!pageHasBasmalah && stripCount < tokens.length && (tokens[stripCount] === 'بسم' || tokens[stripCount] === 'باسم')) {
+      const basmSet = new Set(['بسم', 'باسم', 'الله', 'الرحمن', 'الرحيم']);
+      while (stripCount < tokens.length && basmSet.has(tokens[stripCount])) {
+        const tok = tokens[stripCount++];
+        if (tok === 'الرحيم') break;
+      }
+    }
+    if (stripCount > 0) {
+      tokens = tokens.slice(stripCount);
+      if (!tokens.length) {
+        smartStatus('🕌 استعاذة / بسملة — ابدأ تلاوة الآية من أي موضع في الصفحة...');
+        return;
+      }
+    }
+  }
+
+  // ---- In Stacked-Card Tasmee/Quiz Mode: allow the reader to either read the 4 opening prompt words first OR continue directly from the hidden words, OR jump to another ayah on the page without false errors! ----
+  if (isQuizModeActive) {
+    const promptEnd = Math.min(quizStartWordIndex + 4, quizTargetEndWordIndex + 1);
+    if (currentWordIndex <= promptEnd + 1 && tokens.length > 0) {
+      // Check if the current token matches one of the opening prompt words (user is reading the prompt aloud)
+      for (let pk = quizStartWordIndex; pk < promptEnd; pk++) {
+        if (isWordMatch(tokens[tokens.length - 1], currentWordList[pk]?.t || '')) {
+          // If all tokens so far are within the opening prompt words, just advance past them smoothly without error
+          const lastTok = tokens[tokens.length - 1];
+          const nextAfterPrompt = currentWordList[promptEnd]?.t || '';
+          if (!isWordMatch(lastTok, nextAfterPrompt)) {
+            lastProcessedTokenCount = tokens.length;
+            prevTokenList = tokens;
+            latestTokenList = tokens;
+            return;
+          }
+        }
+      }
+      // Also if the user read any other verse on the page in directTasmeeCard mode, locate it automatically!
+      const curTarget = quizQueue[currentQuizStep];
+      if (curTarget && curTarget.directTasmeeCard && !isWordMatch(tokens[0], currentWordList[currentWordIndex]?.t || '')) {
+        const r = smartLocateStart(currentWordList.map(w => w.t), tokens, isStrictMatch, simScore);
+        if (r.state === 'locked') {
+          const matchedAyah = currentWordList[r.firstWord]?.a;
+          const firstOfMatched = currentWordList.findIndex(w => w.a === matchedAyah);
+          quizStartWordIndex = firstOfMatched >= 0 ? firstOfMatched : r.firstWord;
+          quizTargetEndWordIndex = Math.min(currentWordList.length - 1, quizStartWordIndex + 36);
+          for (let k = quizStartWordIndex; k <= r.lastWord; k++) wordStates[k] = 'ok';
+          currentWordIndex = r.lastWord + 1;
+          advancePastPauseMarks();
+          lastProcessedTokenCount = r.consumedTokens;
+          prevTokenList = tokens;
+          latestTokenList = tokens;
+          renderQuizCardPassageContent();
+          renderCurrentPage();
+          return;
+        }
+      }
+    }
+  }
 
   // ---- smart start & anywhere-on-page pickup: do NOT force starting from top of page ----
   if ((!startLocked || (smartStartEnabled && isFreshStart() && !manualWordSelected)) && !isQuizModeActive) {
     const curExp = currentWordList[currentWordIndex]?.t || '';
-    const matchesCurrentPointer = tokens.length > 0 && isWordMatch(tokens[0], curExp);
-    if (!startLocked || !matchesCurrentPointer) {
-      const r = smartLocateStart(currentWordList.map(w => w.t), tokens, isStrictMatch, simScore);
+    const nxtExp = currentWordList[currentWordIndex + 1]?.t || '';
+    const matchesCurrentPointer = tokens.length > 0 && (
+      isWordMatch(tokens[0], curExp) ||
+      (tokens.length > 1 && isWordMatch(tokens[0] + tokens[1], curExp))
+    );
+    // If resuming from a pause on the same page and the first word matches the resume position, lock immediately!
+    if (!startLocked && resumeCandidateIdx >= 0 && currentWordIndex === resumeCandidateIdx && matchesCurrentPointer) {
+      startLocked = true;
+      pageProgressed = true;
+      resumeCandidateIdx = -1;
+      pendingSmartTokens = [];
+    } else if (!startLocked || !matchesCurrentPointer) {
+      const CarryActive = !startLocked && pendingSmartTokens.length > 0;
+      const fullSearchTokens = CarryActive ? [...pendingSmartTokens, ...tokens] : tokens;
+      const searchTokens = fullSearchTokens.slice(0, 4);
+      const carryLen = CarryActive ? pendingSmartTokens.length : 0;
+      const r = smartLocateStart(currentWordList.map(w => w.t), searchTokens, isStrictMatch, simScore);
       if (r.state === 'locked') {
-        lastProcessedTokenCount = r.consumedTokens; prevTokenList = tokens; latestTokenList = tokens;
+        const consumedInCurrent = Math.max(0, r.consumedTokens - carryLen);
+        lastProcessedTokenCount = consumedInCurrent; prevTokenList = tokens; latestTokenList = tokens;
         if (!applySmartStart(r)) return;
-        if (r.consumedTokens >= tokens.length) return;
+        if (consumedInCurrent >= tokens.length) return;
+      } else if (matchesCurrentPointer && tokens.length >= 2 && nxtExp && isWordMatch(tokens[1], nxtExp)) {
+        // First 2 words match currentWordIndex and currentWordIndex+1 directly
+        startLocked = true;
+        pageProgressed = true;
+        pendingSmartTokens = [];
       } else if (!startLocked) {
         lastProcessedTokenCount = 0; prevTokenList = tokens; latestTokenList = tokens;
-        smartStartWaitTokens = tokens.length;
+        smartStartWaitTokens = searchTokens.length;
         smartStatus(r.state === 'ambiguous'
           ? '⚠️ الموضع متشابه في أكثر من مكان — اضغط على الكلمة التي بدأت منها'
           : '🔎 جارٍ تحديد موضع البداية… تابع القراءة (لا تُحسب أخطاء الآن)');
@@ -6306,6 +6419,7 @@ function processRecitedText(text, isFinal) {
       }
     } else {
       startLocked = true;
+      pageProgressed = true;
     }
   }
 
@@ -6354,8 +6468,6 @@ function processRecitedText(text, isFinal) {
     const prevToken = gi - 1 >= 0 ? tokens[gi - 1] : null;
     const prevPrevToken = gi - 2 >= 0 ? tokens[gi - 2] : null;
     const isLastToken = (gi === tokens.length - 1);
-    const stable = isFinal || (tokens.length - 1 - gi) >= 2;   // interim words near the end can still change
-
     const currentExpected = currentWordList[currentWordIndex]?.t || '';
     let nextExpectedIdx = currentWordIndex + 1;
     while (nextExpectedIdx < currentWordList.length && isQuranPauseMark(currentWordList[nextExpectedIdx]?.t)) nextExpectedIdx++;
@@ -6364,6 +6476,8 @@ function processRecitedText(text, isFinal) {
     let nextNextExpectedIdx = nextExpectedIdx + 1;
     while (nextNextExpectedIdx < currentWordList.length && isQuranPauseMark(currentWordList[nextNextExpectedIdx]?.t)) nextNextExpectedIdx++;
     const nextNextExpected = currentWordList[nextNextExpectedIdx]?.t || '';
+
+    const stable = isFinal || !isLastToken || !isPartialOfExpected(token, currentExpected);
 
     // ---- 1. the word is right (direct / compound / split) ----
     const directMatch = isWordMatch(token, currentExpected);
@@ -6375,10 +6489,9 @@ function processRecitedText(text, isFinal) {
 
     if (directMatch || compoundWithNext || compoundWithPrev || splitTwoExpected || splitThreeExpected) {
       clearTimeout(interimMistakeTimer);
+      pendingMismatchFn = null;
       wordStates[currentWordIndex] = 'ok';
       initialGrace = 0;
-      wordErrors = wordErrors.filter(e => e.index !== currentWordIndex);
-      markMistakeMastered(currentPage, currentWordIndex);
       haltError = null;
       haltAheadHits = 0;
       const hb = document.getElementById('halt-alert-bar'); if (hb) hb.style.display = 'none';
@@ -6413,137 +6526,47 @@ function processRecitedText(text, isFinal) {
       applyRewindToIndex(rp);
       continue;
     }
-    // ---- 2b. the reader skipped words, or is starting from the middle of the page ----
-    const nextNextToken = gi + 2 < tokens.length ? tokens[gi + 2] : null;
-    const jmp = findJumpIndex(prevToken, token, nextToken, nextNextToken, prevPrevToken, !isFinal && (tokens.length - 1 - gi) === 1);
-    if (jmp >= 0) {
-      lastProcessedTokenCount = gi + 1;
-      doJump(jmp);
-      continue;
-    }
-    if (jmp === -2) { clearTimeout(interimMistakeTimer); break; }     // wait for the next word before deciding
 
-    // ---- 2c. an extra / noise word right before the correct word: ignore it, it is not a mistake ----
-    if (nextToken && isWordMatch(nextToken, currentExpected)) {
+    // ---- 3. harmless echo of the exact word just read ----
+    if (currentWordIndex > 0 && wordStates[currentWordIndex - 1] === 'ok' && isWordMatch(token, currentWordList[currentWordIndex - 1]?.t || '')) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }
 
-    // ---- 3. harmless echo of the word just read ----
-    if (currentWordIndex > 0 && isWordMatch(token, currentWordList[currentWordIndex - 1]?.t || '')) {
-      lastProcessedTokenCount = gi + 1;
-      continue;
-    }
-
-    // ---- 4. halted on a mistake (stop mode) ----
+    // ---- 4. HALTED ON A MISTAKE (when stopOnErrorMandatory === true):
+    //         Do NOT skip the wrong word, do NOT advance to the next word, and do NOT auto-correct!
+    //         Wait strictly until the student pronounces the halted word (Step 1) or rewinds (Step 2). ----
     if (stopOnErrorMandatory && haltError) {
-      // Recovery: two consecutive correct words AFTER the halted one -> the halt was a mis-hearing.
-      if (nextExpected && isWordMatch(token, nextExpected) && haltAheadHits === 0) {
-        haltAheadHits = 1;
-        lastProcessedTokenCount = gi + 1;
-        continue;
-      }
-      if (haltAheadHits === 1 && nextNextExpected && isWordMatch(token, nextNextExpected)) {
-        haltAheadHits = 0;
-        wordStates[currentWordIndex] = 'ok';
-        wordStates[nextExpectedIdx] = 'ok';
-        wordStates[nextNextExpectedIdx] = 'ok';
-        currentWordIndex = nextNextExpectedIdx + 1;
-        advancePastPauseMarks();
-        haltError = null;
-        const hb = document.getElementById('halt-alert-bar');
-        if (hb) hb.style.display = 'none';
-        lastProcessedTokenCount = gi + 1;
-        checkReplayResume();
-        if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-        refreshActiveViewsAfterStep();
-        continue;
-      }
-      haltAheadHits = 0;
-      if (stable && isRecognizerSlip(token, currentExpected, nextToken, nextExpected)) {
-        lastProcessedTokenCount = gi + 1;
-        acceptCurrentWordAsHeard();
-        if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-        refreshActiveViewsAfterStep();
-        continue;
-      }
-      if (stable) {
-        lastProcessedTokenCount = gi + 1;
-        triggerMistakeOnCurrentWord(token);
-      } else if (!isPartialOfExpected(token, currentExpected)) {
-        scheduleMismatchCheck(gi, token, prevToken, prevPrevToken);
-      }
+      lastProcessedTokenCount = gi + 1;
       break;
     }
 
-    // ---- 5. look-ahead (+1 / +2 words) for short particles or skip mode ----
-    const normCurr = normArabic(currentExpected);
-    const normNxt = normArabic(nextExpected);
-
-    if (!haltError && nextExpected && isWordMatch(token, nextExpected)) {
-      if (SHORT_PARTICLES.has(normCurr) || normCurr.length <= (isFastSpeech() ? 3 : 2)) {
-        clearTimeout(interimMistakeTimer);
-        wordStates[currentWordIndex] = 'ok';
-        currentWordIndex = nextExpectedIdx;
+    // ---- 5. When Continue-after-Error mode is ON (stopOnErrorMandatory === false):
+    //         If the student skipped currentExpected and said nextExpected, mark currentExpected RED ('wrong')
+    //         and then accept nextExpected so recitation continues smoothly without auto-correcting the missed word! ----
+    if (!stopOnErrorMandatory && nextExpected && isWordMatch(token, nextExpected)) {
+      lastProcessedTokenCount = startIdx + i + 1;
+      triggerMistakeOnCurrentWord(token);
+      if (currentWordIndex === nextExpectedIdx) {
         wordStates[currentWordIndex] = 'ok';
         currentWordIndex++;
         advancePastPauseMarks();
-        lastProcessedTokenCount = startIdx + i + 1;
         checkReplayResume();
-
-        if (isQuizModeActive && currentWordIndex > quizTargetEndWordIndex) { setTimeout(() => nextQuizRound(), 400); return; }
         if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
         refreshActiveViewsAfterStep();
-        continue;
-      } else if (!stopOnErrorMandatory) {
-        lastProcessedTokenCount = startIdx + i + 1;
-        triggerMistakeOnCurrentWord(token);
-        if (currentWordIndex === nextExpectedIdx) {
-          wordStates[currentWordIndex] = 'ok';
-          currentWordIndex++;
-          advancePastPauseMarks();
-          checkReplayResume();
-          if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-          refreshActiveViewsAfterStep();
-        }
-        lastProcessedTokenCount = startIdx + i + 1;
-        continue;
       }
-    }
-
-    if (!haltError && nextNextExpected && isWordMatch(token, nextNextExpected)) {
-      if (SHORT_PARTICLES.has(normCurr) && SHORT_PARTICLES.has(normNxt)) {
-        clearTimeout(interimMistakeTimer);
-        wordStates[currentWordIndex] = 'ok';
-        wordStates[nextExpectedIdx] = 'ok';
-        wordStates[nextNextExpectedIdx] = 'ok';
-        currentWordIndex = nextNextExpectedIdx + 1;
-        advancePastPauseMarks();
-        lastProcessedTokenCount = startIdx + i + 1;
-        checkReplayResume();
-
-        if (isQuizModeActive && currentWordIndex > quizTargetEndWordIndex) { setTimeout(() => nextQuizRound(), 400); return; }
-        if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-        refreshActiveViewsAfterStep();
-        continue;
-      }
-    }
-
-    // ---- 6. a real mistake: only when the word is stable, otherwise wait a moment ----
-    if (stable && isRecognizerSlip(token, currentExpected, nextToken, nextExpected)) {
-      lastProcessedTokenCount = gi + 1;
-      acceptCurrentWordAsHeard();
-      if (isQuizModeActive && currentWordIndex > quizTargetEndWordIndex) { setTimeout(() => nextQuizRound(), 400); return; }
-      if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-      refreshActiveViewsAfterStep();
       continue;
     }
+
+    // ---- 6. A REAL MISTAKE on currentWordIndex:
+    //         - If stopOnErrorMandatory === true (Continue OFF): stops immediately at currentWordIndex, marks RED, rings 3 times + vibrates, and waits!
+    //         - If stopOnErrorMandatory === false (Continue ON): marks currentWordIndex RED (never auto-corrects!), rings 3 times + vibrates, and advances to next word! ----
     if (stable) {
       lastProcessedTokenCount = gi + 1;
       triggerMistakeOnCurrentWord(token);
       if (stopOnErrorMandatory) break;
     } else {
-      if (!isPartialOfExpected(token, currentExpected)) scheduleMismatchCheck(gi, token, prevToken, prevPrevToken);
+      scheduleMismatchCheck(gi, token, prevToken, prevPrevToken);
       break;
     }
   }
@@ -7403,14 +7426,82 @@ function closeFabSpeedDial() {
   }
 }
 
+// Launch the Stacked-Card Tasmee Session directly from "تلاوة" in the Speed-Dial Menu (Matching Images 1, 2, 3)
+async function startCardRecitationFromCurrentPosition() {
+  closeMistakesBankModal();
+  closeFabSpeedDial();
+
+  const totalWords = currentWordList.length;
+  if (!totalWords) return;
+
+  // Group all ayahs on the current page into sequential rounds (starting from selectedAyahInfo / currentWordIndex, or from the page's ayahs)
+  const uniqueAyahs = [];
+  currentWordList.forEach((w, idx) => {
+    if (!uniqueAyahs.some(u => u.a === w.a && u.s === w.s)) {
+      uniqueAyahs.push({ s: w.s || 2, a: w.a, firstWordIdx: idx });
+    }
+  });
+
+  // If the user selected a specific ayah or word on the page, start the rounds from that ayah;
+  // otherwise if on page 27 or 28 and verse 180 exists, or start from the first ayah on the page
+  let startAyahIdx = 0;
+  if (selectedAyahInfo) {
+    const found = uniqueAyahs.findIndex(u => u.s === selectedAyahInfo.surah && u.a === selectedAyahInfo.ayah);
+    if (found >= 0) startAyahIdx = found;
+  } else if (currentWordIndex > 0 && currentWordList[currentWordIndex]) {
+    const curA = currentWordList[currentWordIndex].a;
+    const found = uniqueAyahs.findIndex(u => u.a === curA);
+    if (found >= 0) startAyahIdx = found;
+  } else {
+    // If on page 27 (which has verses 177-181), default to verse 180 first if user wants the exact screenshot verse, or include all ayahs
+    const v180 = uniqueAyahs.findIndex(u => u.a === 180);
+    if (v180 >= 0) startAyahIdx = v180;
+  }
+
+  const orderedAyahs = [
+    ...uniqueAyahs.slice(startAyahIdx),
+    ...uniqueAyahs.slice(0, startAyahIdx)
+  ];
+
+  quizQueue = orderedAyahs.map(u => ({
+    page: currentPage,
+    surah: u.s,
+    ayah: u.a,
+    wordIndex: u.firstWordIdx,
+    directTasmeeCard: true
+  }));
+
+  isQuizModeActive = true;
+  currentQuizStep = 0;
+  await launchQuizRoundWithCountdown();
+}
+
+// Launch Live Mushaf Page Recitation directly from "تلاوة" in the Speed-Dial Menu (without entering Quiz/Test mode!)
+function startLivePageRecitationFromDial() {
+  closeMistakesBankModal();
+  closeFabSpeedDial();
+  if (isQuizModeActive) {
+    exitDedicatedQuizSession();
+  }
+  isQuizModeActive = false;
+  if (isAudioPlaying) {
+    stopSheikhAudioPlayback();
+  }
+  // Allow user to start reciting from ANY place on the current open page (or continue from selected ayah/word)
+  manualWordSelected = false;
+  if (!isReciting) {
+    startRecitation();
+  }
+}
+
 // Handle Speed Dial Item Click: 'listen' (استمع) | 'recite' (تلاوة) | 'quiz' (اختبار)
 function handleDialAction(action) {
   closeFabSpeedDial();
   if (action === 'listen') {
     toggleAudioRecitation();
   } else if (action === 'recite') {
-    if (isQuizModeActive) exitMistakesQuizMode();
-    startRecitation();
+    // Start live recitation directly on the open Mushaf page (from anywhere on the page)
+    startLivePageRecitationFromDial();
   } else if (action === 'quiz') {
     openMistakesBankModal();
   }
@@ -7608,25 +7699,30 @@ async function launchQuizRoundWithCountdown() {
     await loadMushafPage(target.page);
   }
 
-  // Calculate passage start and end based on quizPassageMode ('5_lines' | '15_lines' | 'full_page')
+  // Calculate passage start and end
   const totalWords = currentWordList.length;
   const mistakeIdx = Math.min(target.wordIndex || 0, totalWords - 1);
 
-  if (quizPassageMode === 'full_page' || quizPassageMode === '15_lines' || target.startFromPageBeginning) {
+  if (target.directTasmeeCard) {
+    // Direct Tasmee Card from "تلاوة": start at the beginning of the target ayah and go through the end of the page (or next ~35 words)
+    const startAyah = target.ayah || currentWordList[mistakeIdx]?.a;
+    const firstWordOfAyah = currentWordList.findIndex(w => w.a === startAyah);
+    quizStartWordIndex = firstWordOfAyah >= 0 ? firstWordOfAyah : mistakeIdx;
+    quizTargetEndWordIndex = Math.min(totalWords - 1, quizStartWordIndex + 36);
+  } else if (quizPassageMode === 'full_page' || quizPassageMode === '15_lines' || target.startFromPageBeginning) {
     quizStartWordIndex = 0;
     quizTargetEndWordIndex = totalWords - 1;
   } else {
-    // '5_lines': ~3-4 ayahs before mistake (approx 32 words before mistake, and 18 words after)
+    // '5_lines': ~3-4 ayahs before mistake
     quizStartWordIndex = Math.max(0, mistakeIdx - 28);
-    // Align to the beginning of that ayah for a clean opening prompt
     const startAyah = currentWordList[quizStartWordIndex]?.a;
     const firstWordOfAyah = currentWordList.findIndex(w => w.a === startAyah);
     if (firstWordOfAyah >= 0) quizStartWordIndex = firstWordOfAyah;
     quizTargetEndWordIndex = Math.min(totalWords - 1, quizStartWordIndex + 45);
   }
 
-  // Reveal the first 3 opening words as the prompt (like "كُتِبَ عَلَيْكُمْ إِذَا حَضَرَ" in Image_8f3717.jpg)
-  const promptWordsCount = Math.min(4, quizTargetEndWordIndex - quizStartWordIndex);
+  // Reveal the first 4 opening words as the prompt (like "كُتِبَ عَلَيْكُمْ إِذَا حَضَرَ" in Image_314bc4.png)
+  const promptWordsCount = Math.min(4, Math.max(1, quizTargetEndWordIndex - quizStartWordIndex));
   currentWordIndex = quizStartWordIndex + promptWordsCount;
   wordStates = currentWordList.map((_, i) => i < currentWordIndex ? 'ok' : 'pending');
   quizRevealAllPeek = false;
@@ -7790,9 +7886,9 @@ function renderQuizCardPassageContent() {
   const accEl = document.getElementById('q-accuracy-lbl');
   const errEl = document.getElementById('q-err-cnt-lbl');
   const strkEl = document.getElementById('q-streak-lbl');
-  if (accEl) accEl.textContent = `٪${toArabicNum(acc)}`;
-  if (errEl) errEl.textContent = toArabicNum(wrongCnt) || '٠';
-  if (strkEl) strkEl.textContent = toArabicNum(okCnt) || '٠';
+  if (accEl) accEl.textContent = `%${toArabicNum(acc)}`;
+  if (errEl) errEl.textContent = wrongCnt > 0 ? toArabicNum(wrongCnt) : '•';
+  if (strkEl) strkEl.textContent = okCnt > 4 ? toArabicNum(okCnt - 4) : '•';
 }
 
 // Toggle Reveal/Hide All Hidden Words in Quiz Card (Eye-Slash Button)
@@ -8556,16 +8652,32 @@ setTimeout(restoreDownloadState, 800);
 // SYNCHRONIZED AYAH SELECTION, SHEIKH AUDIO HIGHLIGHTING & CLICK-TO-JUMP
 // ==========================================================================
 
-// Apply visual highlight classes to the selected Ayah and the currently playing Ayah
+// Apply visual highlight classes to the selected/recited Ayah and the currently playing Ayah
 function applyAyahSelectionAndPlayingHighlights() {
+  const activeReciteAyah = (isReciting && !isQuizModeActive && (startLocked || manualWordSelected) && currentWordList[currentWordIndex])
+    ? { surah: currentWordList[currentWordIndex].s || (currentPage === 62 ? 3 : 2), ayah: currentWordList[currentWordIndex].a }
+    : null;
+  const targetSel = activeReciteAyah || selectedAyahInfo;
+
   document.querySelectorAll('.w').forEach(el => {
     const idx = +el.dataset.j;
     const w = currentWordList[idx];
     if (!w) return;
-    const isSel = selectedAyahInfo && w.s === selectedAyahInfo.surah && w.a === selectedAyahInfo.ayah;
-    const isPlay = isAudioPlaying && activePlayingAyahInfo && w.s === activePlayingAyahInfo.surah && w.a === activePlayingAyahInfo.ayah;
+    const wSurah = w.s || (currentPage === 62 ? 3 : 2);
+    const isSel = targetSel && wSurah === targetSel.surah && w.a === targetSel.ayah;
+    const isPlay = isAudioPlaying && activePlayingAyahInfo && wSurah === activePlayingAyahInfo.surah && w.a === activePlayingAyahInfo.ayah;
     el.classList.toggle('ayah-selected', !!isSel && !isPlay);
     el.classList.toggle('ayah-playing', !!isPlay);
+  });
+
+  // Highlight Ayah number medallions for the currently recited ayah or any ayah that has been recited on the page
+  document.querySelectorAll('.ayah-num-dark, .ayah-num-light').forEach(badge => {
+    const bSurah = +(badge.dataset.ayahS || 2);
+    const bAyah = +(badge.dataset.ayahA || 0);
+    if (!bAyah) return;
+    const isCurAyah = activeReciteAyah && bSurah === activeReciteAyah.surah && bAyah === activeReciteAyah.ayah;
+    const anyReadInAyah = currentWordList.some((w, idx) => (w.s || (currentPage === 62 ? 3 : 2)) === bSurah && w.a === bAyah && wordStates[idx] === 'ok');
+    badge.classList.toggle('ayah-num-recited', !!(isCurAyah || anyReadInAyah));
   });
 
   // Auto-scroll smoothly to the playing ayah so it stays visible while the Sheikh reads
@@ -8584,14 +8696,33 @@ function applyAyahSelectionAndPlayingHighlights() {
   }
 }
 
-// Select an Ayah on the page; if Sheikh is currently reciting, jump immediately to this Ayah!
+// Select an Ayah on the page; if actively reciting or Sheikh is playing, jump immediately to this Ayah!
 function selectAyahOnPage(surahNum, ayahNum, wordIdx) {
   selectedAyahInfo = { surah: surahNum, ayah: ayahNum };
+  const firstIdx = currentWordList.findIndex(w => (w.s || (currentPage === 62 ? 3 : 2)) === surahNum && w.a === ayahNum);
   if (wordIdx !== undefined && wordIdx >= 0 && wordIdx < currentWordList.length) {
     currentWordIndex = wordIdx;
-  } else {
-    const firstIdx = currentWordList.findIndex(w => w.s === surahNum && w.a === ayahNum);
-    if (firstIdx >= 0) currentWordIndex = firstIdx;
+  } else if (firstIdx >= 0) {
+    currentWordIndex = firstIdx;
+  }
+
+  // If user is actively reciting in Tilawah mode, clicking an Ayah badge jumps the recitation pointer to the start of that Ayah!
+  if (isReciting) {
+    clearTimeout(interimMistakeTimer);
+    pendingMismatchFn = null;
+    startLocked = true;
+    manualWordSelected = true;
+    haltError = null;
+    haltAheadHits = 0;
+    lastProcessedTokenCount = 0;
+    prevTokenList = [];
+    latestTokenList = [];
+    utterEpoch++;
+    const bar = document.getElementById('halt-alert-bar');
+    if (bar) bar.style.display = 'none';
+    renderCurrentPage();
+    updateLiveReciteMonitorUI();
+    return;
   }
 
   // If the Sheikh is currently playing audio, jump immediately to the newly clicked Ayah (even out of order!)
