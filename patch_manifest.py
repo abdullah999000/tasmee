@@ -7,6 +7,7 @@ perms = (
     '    <uses-permission android:name="android.permission.INTERNET"/>\n'
     '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
     '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
+    '    <uses-permission android:name="android.permission.VIBRATE"/>\n'
 )
 queries = (
     '    <queries>\n'

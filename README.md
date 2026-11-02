@@ -5,8 +5,8 @@
 
 ## الطريقة 1: من الهاتف أو بدون تثبيت فلاتر (GitHub Actions)
 1. أنشئ مستودعاً جديداً على GitHub وارفع محتويات هذا المجلد كلها (مع المجلد المخفي `.github`).
-2. افتح تبويب **Actions** ثم **build-apk** ثم **Run workflow**.
-3. بعد دقائق نزّل `tasmee-apk` من قسم Artifacts، فك الضغط، وثبّت `tasmee.apk` على الهاتف
+2. افتح تبويب **Actions** ثم **Build Tasmee APK** ثم **Run workflow** (أو يبدأ تلقائياً مع كل push على `main`).
+3. بعد دقائق نزّل `Tasmee-APK` من قسم Artifacts، فك الضغط، وثبّت `tasmee.apk` على الهاتف
    (فعّل «التثبيت من مصادر غير معروفة»).
 
 ## الطريقة 2: على حاسوب فيه Flutter و Android SDK
