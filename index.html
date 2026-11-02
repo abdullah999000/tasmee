@@ -2876,6 +2876,18 @@ input, select, textarea { font-size: 16px; } /* stops Android zoom/jump on focus
   .sub-filter-row { font-size: 11px; padding-right: 12px; padding-left: 28px; gap: 6px; }
   .surah-item-row { padding-left: 28px; }
 }
+
+/* ==========================================================================
+   IN-PAGE DIALOGS (replace native alert / confirm inside the app)
+   ========================================================================== */
+.app-dialog-overlay { position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,0.62); display: flex; align-items: center; justify-content: center; padding: 20px; padding-top: calc(20px + var(--safe-top)); padding-bottom: calc(20px + var(--safe-bottom)); }
+.app-dialog-box { width: 100%; max-width: 420px; max-height: 100%; overflow-y: auto; border-radius: 18px; padding: 20px 18px 16px; background: #212328; color: #fff; border: 1px solid #373b44; box-shadow: 0 12px 40px rgba(0,0,0,0.5); font-family: 'Cairo', sans-serif; }
+html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; border-color: rgba(0,0,0,0.12); }
+.app-dialog-msg { font-size: 15px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
+.app-dialog-row { display: flex; gap: 10px; justify-content: flex-start; flex-wrap: wrap; }
+.app-dialog-btn { flex: 1 1 110px; border: 1px solid rgba(128,128,128,0.4); background: transparent; color: inherit; border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.app-dialog-btn.primary { background: #34d399; color: #04130c; border-color: #34d399; }
+.btn-reciter-action.stop-dl { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #f87171; }
 </style>
 </head>
 <body>
@@ -3187,6 +3199,10 @@ input, select, textarea { font-size: 16px; } /* stops Android zoom/jump on focus
         <label style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;cursor:pointer;">
           <span>تفعيل التصحيح المحلي بدون إنترنت (On-Device + محرك التسميع)</span>
           <input type="checkbox" id="cfg-offline-recite" checked style="width:18px;height:18px;accent-color:var(--accent-green);">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;cursor:pointer;">
+          <span>🎯 تحديد بداية التسميع تلقائياً من أي كلمة (أوقفه لاستخدام التحديد اليدوي فقط)</span>
+          <input type="checkbox" id="cfg-smart-start" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="setSmartStart(this.checked)">
         </label>
         <button onclick="prepareOfflineAll()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;background:rgba(52,211,153,0.18);border:1px solid var(--accent-green);color:var(--accent-green);font-family:inherit;font-weight:700;cursor:pointer;">📴 تجهيز التصحيح بدون إنترنت (حفظ المصحف + حزمة الصوت)</button>
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid #26282e;">
@@ -4017,6 +4033,76 @@ input, select, textarea { font-size: 16px; } /* stops Android zoom/jump on focus
 </div>
 
 <script>
+// --- Storage safety net + in-page dialogs (Android WebView) ---
+// If DOM storage is blocked, localStorage throws and the whole app would die on start.
+// Probe it once; if it fails, fall back to an in-memory store so the app still runs.
+(function () {
+  var ok = false;
+  try {
+    var k = '__tasmee_probe__';
+    window.localStorage.setItem(k, '1');
+    ok = window.localStorage.getItem(k) === '1';
+    window.localStorage.removeItem(k);
+  } catch (e) { ok = false; }
+  window.__tasmeeStorageOk = ok;
+  if (!ok) {
+    var mem = {};
+    var shim = {
+      getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+      setItem: function (k, v) { mem[k] = String(v); },
+      removeItem: function (k) { delete mem[k]; },
+      clear: function () { mem = {}; },
+      key: function (i) { return Object.keys(mem)[i] || null; }
+    };
+    Object.defineProperty(shim, 'length', { get: function () { return Object.keys(mem).length; } });
+    try { Object.defineProperty(window, 'localStorage', { value: shim, configurable: true }); } catch (e) {}
+  }
+})();
+
+// A dialog that lives inside the page (native alert/confirm are not reliable in every WebView).
+function appDialog(message, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var ov = document.createElement('div');
+    ov.className = 'app-dialog-overlay';
+    ov.setAttribute('dir', 'rtl');
+    var box = document.createElement('div');
+    box.className = 'app-dialog-box';
+    var msg = document.createElement('div');
+    msg.className = 'app-dialog-msg';
+    msg.textContent = String(message);
+    var row = document.createElement('div');
+    row.className = 'app-dialog-row';
+    function done(v) { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(v); }
+    var okBtn = document.createElement('button');
+    okBtn.className = 'app-dialog-btn primary';
+    okBtn.textContent = opts.okText || 'حسناً';
+    okBtn.onclick = function () { done(true); };
+    row.appendChild(okBtn);
+    if (opts.confirm) {
+      var noBtn = document.createElement('button');
+      noBtn.className = 'app-dialog-btn';
+      noBtn.textContent = opts.cancelText || 'إلغاء';
+      noBtn.onclick = function () { done(false); };
+      row.appendChild(noBtn);
+    }
+    box.appendChild(msg);
+    box.appendChild(row);
+    ov.appendChild(box);
+    (document.body || document.documentElement).appendChild(ov);
+  });
+}
+function appConfirm(message, okText, cancelText) {
+  return appDialog(message, { confirm: true, okText: okText, cancelText: cancelText });
+}
+if (window.Tasmee) { window.alert = function (m) { appDialog(m); }; }
+if (!window.__tasmeeStorageOk) {
+  window.addEventListener('load', function () {
+    appDialog('تنبيه: تخزين التطبيق غير متاح على هذا الجهاز، لذلك لن تُحفظ الإعدادات والعلامات المرجعية بعد إغلاق التطبيق.');
+  });
+}
+</script>
+<script>
 // --- Flutter Webview Bridge Initialization ---
 if (window.Tasmee) {
   window.SpeechRecognition = window.webkitSpeechRecognition = class {
@@ -4666,8 +4752,8 @@ async function downloadOfflineMushafPackage() {
     if (statusEl) statusEl.textContent = '✔ تم الحفظ كاملاً (يعمل بدون إنترنت)';
     alert('✔ تم تنزيل وحفظ المصحف الشريف كاملاً (٦٢٣٦ آية وجميع الصفحات) على جهازك بنجاح! سيعمل البحث وتقليب الصفحات والتصحيح المحلي بدون إنترنت.');
   } else {
-    if (statusEl) statusEl.textContent = '✔ السور الأساسية محفوظة محلياً';
-    alert('✔ المحرك المحلي جاهز ويعمل بدون إنترنت للسور والآيات المدمجة.');
+    if (statusEl) statusEl.textContent = '⚠ لم يكتمل تنزيل المصحف كاملاً (السور الأساسية فقط محفوظة محلياً)';
+    alert('⚠ تعذّر تنزيل المصحف كاملاً الآن، تأكد من الإنترنت وحاول مرة أخرى. السور والآيات المدمجة تعمل بدون إنترنت.');
   }
 }
 
@@ -5034,6 +5120,7 @@ function bindWordEvents() {
       if (!w) return;
       // If actively reciting, clicking any word moves the recitation pointer directly to that word!
       if (isReciting) {
+        startLocked = true;   // a manual tap always wins over the automatic search
         currentWordIndex = idx;
         haltError = null;
         lastProcessedTokenCount = 0;
@@ -5388,7 +5475,15 @@ async function prepareOfflineAll() {
 function startRecitation() {
   getAudioContext();
   initialGrace = 0;
+  // resume after a pause: same page, same pointer -> keep errors / progress, do not restart the search
+  const resuming = !isReciting && !isQuizModeActive && currentWordIndex > 0 && lastStopInfo &&
+    lastStopInfo.page === currentPage && lastStopInfo.idx === currentWordIndex && wordStates.length === currentWordList.length;
   if (!isReciting && !isQuizModeActive) {
+    // manual start (a word was chosen first / resuming) is kept exactly as before; otherwise search automatically
+    startLocked = !smartStartEnabled || currentWordIndex > 0;
+    smartStartWaitTokens = 0;
+  }
+  if (!isReciting && !isQuizModeActive && !resuming) {
     // New recitation session: start counting errors from zero and clear old red marks / colours
     redMarks = {};
     try { localStorage.setItem('tasmee_red_marks', '{}'); } catch (_) {}
@@ -5526,7 +5621,9 @@ function startRecitation() {
   } catch (_) {}
 }
 
+let lastStopInfo = null;
 function stopRecitation() {
+  if (isReciting && startLocked) { lastStopInfo = { page: currentPage, idx: currentWordIndex }; try { localStorage.setItem('tasmee_resume', JSON.stringify(lastStopInfo)); } catch (_) {} }
   isReciting = false;
   clearTimeout(interimMistakeTimer);
   btnRecite.classList.remove('recording');
@@ -5648,6 +5745,90 @@ function normalizeTokenStream(rawTokens) {
 }
 
 
+
+// <SMART_START_BEGIN>
+// ==========================================================================
+// SMART RECITATION START DETECTION (works fully on-device, no network)
+// Finds WHERE on the page the reader began, by aligning several consecutive spoken
+// words with the Mushaf text (local alignment, tolerant to a misheard / skipped word).
+// Nothing is judged (no mistakes, no red words) until the position is confident and unique.
+// ==========================================================================
+const SMART_START_MIN_STRICT = 3;     // consecutive-ish words that must match exactly
+const SMART_START_GIVE_UP_TOKENS = 12; // still ambiguous after this many words -> ask for a manual tap
+function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
+  const live = [];
+  for (let k = 0; k < wordTexts.length; k++) if (normArabic(wordTexts[k])) live.push(k);
+  const W = live.length, T = tokens.length;
+  if (T < 2 || W < 2) return { state: 'wait', reason: 'few-words' };
+  const MATCH = 3, FUZZY = 1.2, MIS = -2.5, GAP = -2;
+  // score matrix + traceback
+  const H = [], B = [];
+  const sm = (i, j) => {
+    const t = tokens[i], w = wordTexts[live[j]];
+    if (strictFn(t, w)) return MATCH;
+    const a = normArabic(t), b = normArabic(w);
+    if (a.length >= 4 && b.length >= 4 && simFn(a, b) >= 0.8) return FUZZY;
+    return MIS;
+  };
+  for (let i = 0; i <= T; i++) { H.push(new Array(W + 1).fill(0)); B.push(new Array(W + 1).fill(0)); }
+  const cand = [];   // best end cell per word column
+  for (let j = 1; j <= W; j++) {
+    let bestI = 0, bestV = 0;
+    for (let i = 1; i <= T; i++) {
+      const diag = H[i - 1][j - 1] + sm(i - 1, j - 1);
+      const up = H[i - 1][j] + GAP;      // extra spoken word (noise)
+      const left = H[i][j - 1] + GAP;    // page word the reader skipped
+      let v = 0, b = 0;
+      if (diag > v) { v = diag; b = 1; }
+      if (up > v) { v = up; b = 2; }
+      if (left > v) { v = left; b = 3; }
+      H[i][j] = v; B[i][j] = b;
+      if (v > bestV) { bestV = v; bestI = i; }
+    }
+    if (bestV > 0) cand.push({ j, i: bestI, v: bestV });
+  }
+  if (!cand.length) return { state: 'wait', reason: 'no-match' };
+  const trace = c => {
+    let i = c.i, j = c.j; const pairs = [];
+    while (i > 0 && j > 0 && H[i][j] > 0) {
+      const b = B[i][j];
+      if (b === 1) { pairs.push([i - 1, j - 1, H[i][j] - H[i - 1][j - 1]]); i--; j--; }
+      else if (b === 2) i--; else j--;
+    }
+    return pairs.reverse();
+  };
+  cand.sort((x, y) => y.v - x.v);
+  const best = cand[0];
+  const pairs = trace(best);
+  const strictPairs = pairs.filter(p => p[2] >= MATCH - 0.01);
+  const strictLen = strictPairs.reduce((n, p) => n + normArabic(wordTexts[live[p[1]]]).length, 0);
+  const enough = strictPairs.length >= SMART_START_MIN_STRICT || (strictPairs.length >= 2 && strictLen >= 10);
+  if (!enough) return { state: 'wait', reason: 'low-evidence', score: best.v };
+  // uniqueness: is there a DIFFERENT place on the page that explains the words about as well?
+  const usedCols = new Set(pairs.map(p => p[1]));
+  const lo = Math.min(...usedCols), hi = Math.max(...usedCols);
+  let rival = null;
+  for (let q = 1; q < cand.length; q++) {
+    const c = cand[q];
+    if (c.j - 1 >= lo - 1 && c.j - 1 <= hi + 1) continue;      // same alignment
+    if (best.v - c.v < MATCH) { rival = c; break; }
+    break;                                                      // sorted: the rest are weaker still
+  }
+  if (rival) {
+    return (T >= SMART_START_GIVE_UP_TOKENS)
+      ? { state: 'ambiguous', score: best.v }
+      : { state: 'wait', reason: 'ambiguous', score: best.v };
+  }
+  const first = live[pairs[0][1]], last = live[pairs[pairs.length - 1][1]];
+  const matched = pairs.filter(p => p[2] > 0).map(p => live[p[1]]);
+  return {
+    state: 'locked', score: best.v, strict: strictPairs.length,
+    firstWord: first, lastWord: last, matched,
+    consumedTokens: pairs[pairs.length - 1][0] + 1
+  };
+}
+// <SMART_START_END>
+
 // ===== End of page reached: continue automatically on the next page (no tap / swipe needed) =====
 let pageAdvancing = false, pendingAdvanceText = '', advanceBaseCount = 0;
 async function finishPageOrAdvance(consumed) {
@@ -5675,6 +5856,33 @@ async function finishPageOrAdvance(consumed) {
     pageAdvancing = false;
     stopRecitation();
   }
+}
+
+
+// --- smart start state ---
+let smartStartEnabled = true;       // user setting (cfg-smart-start); off = manual start only, like before
+let startLocked = true;             // false only while an automatic start search is running
+let smartStartWaitTokens = 0;
+try { smartStartEnabled = localStorage.getItem('tasmee_smart_start') !== '0'; } catch (_) {}
+function setSmartStart(on) {
+  smartStartEnabled = !!on;
+  try { localStorage.setItem('tasmee_smart_start', on ? '1' : '0'); } catch (_) {}
+}
+function smartStatus(msg) {
+  const pv = document.getElementById('live-heard-preview');
+  if (pv && msg) pv.textContent = msg;
+}
+function applySmartStart(r) {
+  r.matched.forEach(k => { if (!isQuranPauseMark(currentWordList[k]?.t)) wordStates[k] = 'ok'; });
+  startLocked = true;
+  initialGrace = 0; haltError = null; haltAheadHits = 0;
+  currentWordIndex = r.lastWord + 1;
+  advancePastPauseMarks();
+  const w = currentWordList[r.firstWord];
+  smartStatus('🎯 تم تحديد بداية التلاوة تلقائياً' + (w ? ' من: ' + w.t : ''));
+  if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(r.consumedTokens); return false; }
+  refreshActiveViewsAfterStep();
+  return true;
 }
 
 let lastProcessedTokenCount = 0;
@@ -6035,6 +6243,22 @@ function processRecitedText(text, isFinal) {
   const rawTokens = normArabic(text).split(/\s+/).filter(Boolean);
   const tokens = normalizeTokenStream(rawTokens);
   if (!tokens.length) return;
+
+  // ---- smart start: do NOT judge anything until we know where the reader began ----
+  if (!startLocked && !isQuizModeActive) {
+    const r = smartLocateStart(currentWordList.map(w => w.t), tokens, isStrictMatch, simScore);
+    if (r.state === 'locked') {
+      lastProcessedTokenCount = r.consumedTokens; prevTokenList = tokens; latestTokenList = tokens;
+      if (!applySmartStart(r)) return;
+    } else {
+      lastProcessedTokenCount = 0; prevTokenList = tokens; latestTokenList = tokens;
+      smartStartWaitTokens = tokens.length;
+      smartStatus(r.state === 'ambiguous'
+        ? '⚠️ الموضع متشابه في أكثر من مكان — اضغط على الكلمة التي بدأت منها'
+        : '🔎 جارٍ تحديد موضع البداية… تابع القراءة (لا تُحسب أخطاء الآن)');
+      return;
+    }
+  }
 
   const startIdx = alignedStart(tokens);
   lastProcessedTokenCount = startIdx;
@@ -6615,7 +6839,27 @@ const OFFLINE_SEARCH_AYAHS = [{"s": 1, "a": 1, "p": 1, "t": "بِسْمِ ٱلل
 // Load or fetch full 6236-ayah Quran index in background when online (both Uthmani & Simple Clean for 100% search coverage!)
 let isFetchingFullQuran = false;
 
-function idbOpen() { return new Promise((res, rej) => { const r = indexedDB.open('tasmee_db', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+let _idbPromise = null;
+function idbOpen() {
+  if (_idbPromise) return _idbPromise;
+  _idbPromise = new Promise((res, rej) => {
+    let r;
+    try { r = indexedDB.open('tasmee_db', 2); } catch (e) { _idbPromise = null; return rej(e); }
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio');
+    };
+    r.onsuccess = () => {
+      const db = r.result;
+      db.onversionchange = () => { try { db.close(); } catch (_) {} _idbPromise = null; };
+      db.onclose = () => { _idbPromise = null; };
+      res(db);
+    };
+    r.onerror = () => { _idbPromise = null; rej(r.error); };
+  });
+  return _idbPromise;
+}
 async function idbGet(k) { try { const db = await idbOpen(); return await new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch (_) { return undefined; } }
 async function idbSet(k, v) { try { const db = await idbOpen(); await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); return true; } catch (_) { return false; } }
 // Loads the saved full Quran from the device only (no network)
@@ -7797,7 +8041,8 @@ const RECITERS_CATALOG = [
 let selectedReciterId = localStorage.getItem('tasmee_selected_reciter') || 'Husary_128kbps';
 let selectedAyahInfo = null; // { surah: 2, ayah: 164 }
 let activePlayingAyahInfo = null; // { surah: 2, ayah: 164 }
-let offlineDownloadedReciters = JSON.parse(localStorage.getItem('tasmee_dl_reciters') || '{}');
+let offlineDownloadedReciters = {};
+try { offlineDownloadedReciters = JSON.parse(localStorage.getItem('tasmee_dl_reciters') || '{}') || {}; } catch (_) { offlineDownloadedReciters = {}; }
 let activeDownloadAbort = {};
 
 function getReciterById(id) {
@@ -7841,8 +8086,42 @@ function renderRecitersDownloadCards() {
   container.innerHTML = RECITERS_CATALOG.map(r => {
     const isSelected = r.id === selectedReciterId;
     const dlInfo = offlineDownloadedReciters[r.id];
-    const isFullDl = dlInfo && dlInfo.fullOfflineReady;
+    const rt = dlRuntime[r.id];
+    const running = !!(rt && rt.running);
+    const isFullDl = !!(dlInfo && dlInfo.fullOfflineReady);
     const cachedCount = dlInfo ? (dlInfo.cachedAyahsCount || 0) : 0;
+    const job = dlInfo && dlInfo.job;
+    const unfinished = !running && job && (job.status === 'interrupted' || job.status === 'partial' || job.status === 'stopped' || job.status === 'quota');
+    const pct = running ? (rt.total ? Math.round((rt.done / rt.total) * 100) : 0) : 0;
+
+    let statusText;
+    if (running) {
+      statusText = `جارٍ تنزيل وحفظ التلاوة بدون إنترنت... ${toArabicNum(rt.done)} / ${toArabicNum(rt.total)} (${toArabicNum(pct)}٪)`;
+    } else if (isFullDl) {
+      statusText = '✔ تم حفظ المصحف كاملاً للعمل بدون إنترنت (' + toArabicNum(cachedCount) + ' آية محفوظة)';
+    } else if (job && job.status === 'stopped') {
+      statusText = `⏹ تم إيقاف التنزيل: محفوظ ${toArabicNum(job.done || 0)} من ${toArabicNum(job.total || 0)} آية — اضغط التنزيل للمتابعة`;
+    } else if (job && job.status === 'quota') {
+      statusText = `⚠ المساحة غير كافية: محفوظ ${toArabicNum(job.done || 0)} من ${toArabicNum(job.total || 0)} آية — وفّر مساحة ثم اضغط التنزيل للمتابعة`;
+    } else if (unfinished) {
+      statusText = `⚠ تنزيل غير مكتمل: محفوظ ${toArabicNum(job.done || 0)} من ${toArabicNum(job.total || 0)} آية — اضغط التنزيل للمتابعة (إجمالي المحفوظ للقارئ: ${toArabicNum(cachedCount)} آية)`;
+    } else if (cachedCount > 0) {
+      statusText = 'محفوظ محلياً: ' + toArabicNum(cachedCount) + ' آية بدون إنترنت';
+    } else {
+      statusText = 'متاح للاستماع المباشر والتنزيل بدون إنترنت';
+    }
+
+    const actions = running
+      ? `<button class="btn-reciter-action stop-dl" onclick="stopOfflineDownload('${r.id}')">⏹ إيقاف التنزيل</button>`
+      : `<button class="btn-reciter-action" onclick="selectActiveReciter('${r.id}', true)">
+            ▶ استمع الآن
+          </button>
+          <button class="btn-reciter-action primary-dl" onclick="downloadPageAndSurahOfflineForReciter('${r.id}', false)">
+            📥 تنزيل السورة الحالية
+          </button>
+          <button class="btn-reciter-action ${isFullDl ? 'downloaded' : 'primary-dl'}" id="btn-full-dl-${r.id}" onclick="downloadPageAndSurahOfflineForReciter('${r.id}', true)">
+            ${isFullDl ? '✔ المصحف كامل بدون إنترنت' : '🌐 تنزيل القرآن كاملاً بدون إنترنت'}
+          </button>`;
 
     return `
       <div class="reciter-dl-card ${isSelected ? 'selected-reciter' : ''}">
@@ -7855,113 +8134,343 @@ function renderRecitersDownloadCards() {
             </div>
             <div class="reciter-riwayah-sub">${r.riwayah}</div>
             <div style="font-size:11px;color:var(--accent-green);margin-top:3px;" id="dl-status-txt-${r.id}">
-              ${isFullDl ? '✔ تم تفعيل وحفظ التلاوة للعمل بدون إنترنت (' + toArabicNum(cachedCount) + ' آية محفوظة)' : (cachedCount > 0 ? 'محفوظ محلياً: ' + toArabicNum(cachedCount) + ' آية بدون إنترنت' : 'متاح للاستماع المباشر والتنزيل بدون إنترنت')}
+              ${statusText}
             </div>
           </div>
         </div>
 
-        <div class="dl-progress-track" id="dl-track-${r.id}">
-          <div class="dl-progress-bar-fill" id="dl-fill-${r.id}"></div>
+        <div class="dl-progress-track ${running ? 'active' : ''}" id="dl-track-${r.id}">
+          <div class="dl-progress-bar-fill" id="dl-fill-${r.id}" style="width:${pct}%"></div>
         </div>
 
         <div class="reciter-actions-row">
-          <button class="btn-reciter-action" onclick="selectActiveReciter('${r.id}', true)">
-            ▶ استمع الآن
-          </button>
-          <button class="btn-reciter-action primary-dl" onclick="downloadPageAndSurahOfflineForReciter('${r.id}', false)">
-            📥 تنزيل السورة الحالية
-          </button>
-          <button class="btn-reciter-action ${isFullDl ? 'downloaded' : 'primary-dl'}" id="btn-full-dl-${r.id}" onclick="downloadPageAndSurahOfflineForReciter('${r.id}', true)">
-            ${isFullDl ? '✔ المصحف كامل بدون إنترنت' : '🌐 تنزيل القرآن كاملاً بدون إنترنت'}
-          </button>
+          ${actions}
         </div>
       </div>
     `;
   }).join('');
 }
 
-// Cache Audio Files in Browser/WebView CacheStorage so they play 100% Offline without internet
-async function cacheAyahAudioOffline(reciterId, surahNum, ayahNum) {
-  const sPad = String(surahNum).padStart(3, '0');
-  const aPad = String(ayahNum).padStart(3, '0');
-  const url = `https://everyayah.com/data/${reciterId}/${sPad}${aPad}.mp3`;
+// ==========================================================================
+// OFFLINE AUDIO STORE (CacheStorage first, IndexedDB as a fallback)
+// ==========================================================================
+const AUDIO_CACHE_NAME = 'tasmee-offline-audio-v1';
+const AUDIO_MIN_BYTES = 1500;               // a real ayah mp3 is always bigger than this
+const TOTAL_AYAHS = ALL_SURAHS.reduce((n, su) => n + su.c, 0);   // 6236
+const _pad3 = n => String(n).padStart(3, '0');
+const _dlSleep = ms => new Promise(r => setTimeout(r, ms));
+let _audioBackend = null;
+let _lastAudioObjUrl = null;
+
+function ayahAudioUrl(reciterId, s, a) {
+  return `https://everyayah.com/data/${reciterId}/${_pad3(s)}${_pad3(a)}.mp3`;
+}
+
+async function audioBackend() {
+  if (_audioBackend) return _audioBackend;
   try {
-    if ('caches' in window) {
-      const cache = await caches.open('tasmee-offline-audio-v1');
-      const existing = await cache.match(url);
-      if (!existing) {
-        const resp = await fetch(url, { mode: 'cors' });
-        if (resp && resp.ok) {
-          await cache.put(url, resp.clone());
-        }
-      }
-      return true;
+    if (typeof caches !== 'undefined' && caches && typeof caches.open === 'function') {
+      await caches.open(AUDIO_CACHE_NAME);
+      _audioBackend = 'cache';
+      return _audioBackend;
+    }
+  } catch (_) {}
+  try { await idbOpen(); _audioBackend = 'idb'; } catch (_) { _audioBackend = 'none'; }
+  return _audioBackend;
+}
+
+async function audioStoreHas(url) {
+  const be = await audioBackend();
+  try {
+    if (be === 'cache') {
+      const c = await caches.open(AUDIO_CACHE_NAME);
+      return !!(await c.match(url));
+    }
+    if (be === 'idb') {
+      const db = await idbOpen();
+      return await new Promise((res, rej) => {
+        const q = db.transaction('audio').objectStore('audio').count(url);
+        q.onsuccess = () => res(q.result > 0);
+        q.onerror = () => rej(q.error);
+      });
     }
   } catch (_) {}
   return false;
 }
 
-// Download Current Page / Surah or Full Quran Audio Queue for Offline Playback
-async function downloadPageAndSurahOfflineForReciter(reciterId, isFullQuran) {
-  const track = document.getElementById(`dl-track-${reciterId}`);
-  const fill = document.getElementById(`dl-fill-${reciterId}`);
-  const statusTxt = document.getElementById(`dl-status-txt-${reciterId}`);
-  if (track) track.classList.add('active');
-
-  // Build queue of ayahs to cache immediately (Current Page ayahs + Current Surah + Juz 30 / Full Quran queue)
-  const queue = [];
-  const seenKeys = new Set();
-
-  // 1. Always prioritize all ayahs on the currently open Mushaf page first!
-  currentWordList.forEach(w => {
-    const k = `${w.s}:${w.a}`;
-    if (!seenKeys.has(k)) {
-      seenKeys.add(k);
-      queue.push({ s: w.s, a: w.a });
+async function audioStoreGet(url) {
+  const be = await audioBackend();
+  try {
+    if (be === 'cache') {
+      const c = await caches.open(AUDIO_CACHE_NAME);
+      const r = await c.match(url);
+      return r ? await r.blob() : null;
     }
-  });
+    if (be === 'idb') {
+      const db = await idbOpen();
+      return await new Promise((res, rej) => {
+        const q = db.transaction('audio').objectStore('audio').get(url);
+        q.onsuccess = () => res(q.result || null);
+        q.onerror = () => rej(q.error);
+      });
+    }
+  } catch (_) {}
+  return null;
+}
 
-  // 2. If Full Quran requested, add key surahs and register background full-mushaf offline sync
-  if (isFullQuran) {
-    // Add Al-Fatihah, Page 25, Page 62, Al-Ikhlas, Al-Falaq, An-Nas immediately + mark full offline sync active
-    [[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,7],[2,255],[112,1],[112,2],[112,3],[112,4]].forEach(([s,a]) => {
-      const k = `${s}:${a}`;
-      if (!seenKeys.has(k)) {
-        seenKeys.add(k);
-        queue.push({ s, a });
-      }
+// Stores the file and only returns true when it can be read back afterwards.
+async function audioStorePut(url, blob) {
+  const be = await audioBackend();
+  if (be === 'cache') {
+    const c = await caches.open(AUDIO_CACHE_NAME);
+    await c.put(url, new Response(blob, { status: 200, headers: { 'Content-Type': blob.type || 'audio/mpeg', 'Content-Length': String(blob.size) } }));
+  } else if (be === 'idb') {
+    const db = await idbOpen();
+    await new Promise((res, rej) => {
+      const t = db.transaction('audio', 'readwrite');
+      t.objectStore('audio').put(blob, url);
+      t.oncomplete = res;
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error || new Error('aborted'));
     });
+  } else {
+    return false;
   }
+  return await audioStoreHas(url);
+}
 
-  let completed = 0;
-  for (let i = 0; i < queue.length; i++) {
-    const item = queue[i];
-    await cacheAyahAudioOffline(reciterId, item.s, item.a);
-    completed++;
-    const pct = Math.round((completed / queue.length) * 100);
-    if (fill) fill.style.width = pct + '%';
-    if (statusTxt) {
-      statusTxt.textContent = `جارٍ تنزيل وحفظ التلاوة بدون إنترنت... (${toArabicNum(pct)}٪)`;
-    }
-  }
-
-  const prevCount = offlineDownloadedReciters[reciterId]?.cachedAyahsCount || 0;
-  offlineDownloadedReciters[reciterId] = {
-    fullOfflineReady: isFullQuran || (offlineDownloadedReciters[reciterId]?.fullOfflineReady || false),
-    cachedAyahsCount: isFullQuran ? 6236 : (prevCount + completed),
-    updatedAt: new Date().toLocaleDateString('ar-EG')
+// Map: reciterId -> Set("sssaaa") of every ayah file really stored on the device
+async function audioStoreListAll() {
+  const out = new Map();
+  const be = await audioBackend();
+  const re = /\/data\/([^/]+)\/(\d{3})(\d{3})\.mp3$/;
+  const add = (u) => {
+    const m = re.exec(u);
+    if (!m) return;
+    if (!out.has(m[1])) out.set(m[1], new Set());
+    out.get(m[1]).add(m[2] + m[3]);
   };
   try {
-    localStorage.setItem('tasmee_dl_reciters', JSON.stringify(offlineDownloadedReciters));
+    if (be === 'cache') {
+      const c = await caches.open(AUDIO_CACHE_NAME);
+      (await c.keys()).forEach(rq => add(rq.url));
+    } else if (be === 'idb') {
+      const db = await idbOpen();
+      const keys = await new Promise((res, rej) => {
+        const q = db.transaction('audio').objectStore('audio').getAllKeys();
+        q.onsuccess = () => res(q.result || []);
+        q.onerror = () => rej(q.error);
+      });
+      keys.forEach(k => add(String(k)));
+    }
   } catch (_) {}
+  return out;
+}
 
-  if (statusTxt) {
-    statusTxt.textContent = isFullQuran
-      ? '✔ تم تفعيل وحفظ المصحف الكامل لهذا القارئ للعمل بدون إنترنت'
-      : `✔ تم حفظ تلاوة الصفحة والسورة بدون إنترنت (${toArabicNum(completed)} آية)`;
+async function fetchAyahBlob(url, ctl) {
+  let lastErr = null;
+  for (let t = 1; t <= 3; t++) {
+    if (ctl && ctl.cancelled) throw new Error('cancelled');
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 30000);
+    try {
+      const resp = await fetch(url, { mode: 'cors', signal: ac.signal });
+      if (!resp.ok) throw new Error('http ' + resp.status);
+      const blob = await resp.blob();
+      if (blob.size < AUDIO_MIN_BYTES) throw new Error('file too small');
+      const ty = (blob.type || '').toLowerCase();
+      if (ty.indexOf('text') >= 0 || ty.indexOf('html') >= 0 || ty.indexOf('json') >= 0) throw new Error('not audio');
+      clearTimeout(to);
+      return blob;
+    } catch (e) {
+      clearTimeout(to);
+      lastErr = e;
+      if (String(e && e.message).indexOf('http 404') >= 0) break;   // the file does not exist: retrying is pointless
+      await _dlSleep(700 * t);
+    }
+  }
+  throw lastErr || new Error('failed');
+}
+
+// Downloads one ayah. Returns true ONLY if the file is stored and can be read back.
+async function cacheAyahAudioOffline(reciterId, surahNum, ayahNum, ctl) {
+  const url = ayahAudioUrl(reciterId, surahNum, ayahNum);
+  try {
+    if (await audioStoreHas(url)) return true;
+    const blob = await fetchAyahBlob(url, ctl);
+    return await audioStorePut(url, blob);
+  } catch (e) {
+    if (e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message))) && ctl) ctl.quota = true;
+    return false;
+  }
+}
+
+// ==========================================================================
+// DOWNLOAD JOBS (current page + whole surah, or the entire Quran)
+// ==========================================================================
+const dlRuntime = {};   // reciterId -> live progress (only while the app is open)
+
+function saveDlState() {
+  try { localStorage.setItem('tasmee_dl_reciters', JSON.stringify(offlineDownloadedReciters)); } catch (_) {}
+}
+
+function buildAudioQueue(scope) {
+  const queue = [];
+  const seen = new Set();
+  const add = (s, a) => { const k = s + ':' + a; if (!seen.has(k)) { seen.add(k); queue.push({ s, a }); } };
+  const surahsOnPage = [];
+  currentWordList.forEach(w => {
+    add(w.s, w.a);
+    if (surahsOnPage.indexOf(w.s) < 0) surahsOnPage.push(w.s);
+  });
+  if (scope === 'full') {
+    ALL_SURAHS.forEach(su => { for (let a = 1; a <= su.c; a++) add(su.s, a); });
+  } else {
+    if (selectedAyahInfo && surahsOnPage.indexOf(selectedAyahInfo.surah) < 0) surahsOnPage.push(selectedAyahInfo.surah);
+    if (!surahsOnPage.length) surahsOnPage.push(1);
+    surahsOnPage.forEach(sn => {
+      const su = ALL_SURAHS.find(x => x.s === sn);
+      if (su) for (let a = 1; a <= su.c; a++) add(su.s, a);
+    });
+  }
+  return queue;
+}
+
+function dlSetStatus(reciterId, text, pct) {
+  const statusTxt = document.getElementById(`dl-status-txt-${reciterId}`);
+  const fill = document.getElementById(`dl-fill-${reciterId}`);
+  const track = document.getElementById(`dl-track-${reciterId}`);
+  if (statusTxt && text != null) statusTxt.textContent = text;
+  if (track && pct != null) track.classList.add('active');
+  if (fill && pct != null) fill.style.width = pct + '%';
+}
+
+function stopOfflineDownload(reciterId) {
+  const rt = dlRuntime[reciterId];
+  if (rt && rt.running) rt.cancelled = true;
+}
+
+async function downloadPageAndSurahOfflineForReciter(reciterId, isFullQuran) {
+  const prevRt = dlRuntime[reciterId];
+  if (prevRt && prevRt.running) return;                       // already running
+  if (!navigator.onLine) {
+    appDialog('لا يوجد اتصال بالإنترنت الآن. التنزيل يحتاج إنترنت، وما نُزّل سابقاً يعمل بدون إنترنت.');
+    return;
+  }
+  const be = await audioBackend();
+  if (be === 'none') {
+    appDialog('تخزين الصوت غير متاح على هذا الجهاز، لذلك لا يمكن تنزيل التلاوة للعمل بدون إنترنت.');
+    return;
+  }
+
+  const scope = isFullQuran ? 'full' : 'surah';
+  const queue = buildAudioQueue(scope);
+  const have = (await audioStoreListAll()).get(reciterId) || new Set();
+  const key = it => _pad3(it.s) + _pad3(it.a);
+  const missing = queue.filter(it => !have.has(key(it)));
+
+  if (isFullQuran && missing.length > 0) {
+    let freeTxt = '';
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const est = await navigator.storage.estimate();
+        if (est && est.quota) freeTxt = `\nالمساحة المتاحة للتطبيق: حوالي ${Math.max(0, Math.round((est.quota - (est.usage || 0)) / 1048576))} ميجابايت.`;
+      }
+    } catch (_) {}
+    const okGo = await appConfirm(
+      `سيتم تنزيل ${toArabicNum(missing.length)} ملفاً صوتياً (القرآن كاملاً). الحجم كبير وقد يصل إلى مئات الميجابايت، فيُفضّل استخدام شبكة Wi‑Fi وإبقاء التطبيق مفتوحاً.${freeTxt}\nيمكنك إيقاف التنزيل ومتابعته لاحقاً دون فقدان ما نُزّل.`,
+      'ابدأ التنزيل', 'إلغاء');
+    if (!okGo) return;
+  }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (_) {}
+
+  const rt = { running: true, cancelled: false, quota: false, scope, total: queue.length, done: queue.length - missing.length, failed: 0 };
+  dlRuntime[reciterId] = rt;
+  const rec = offlineDownloadedReciters[reciterId] || {};
+  rec.job = { scope, total: rt.total, done: rt.done, failed: 0, status: 'running' };
+  offlineDownloadedReciters[reciterId] = rec;
+  saveDlState();
+  renderRecitersDownloadCards();
+
+  const ui = () => {
+    const pct = rt.total ? Math.round((rt.done / rt.total) * 100) : 100;
+    dlSetStatus(reciterId, `جارٍ تنزيل وحفظ التلاوة بدون إنترنت... ${toArabicNum(rt.done)} / ${toArabicNum(rt.total)} (${toArabicNum(pct)}٪)`, pct);
+  };
+  ui();
+
+  let idx = 0, sinceSave = 0;
+  const worker = async () => {
+    while (!rt.cancelled && !rt.quota) {
+      const i = idx++;
+      if (i >= missing.length) break;
+      const ok = await cacheAyahAudioOffline(reciterId, missing[i].s, missing[i].a, rt);
+      if (ok) rt.done++; else if (!rt.cancelled) rt.failed++;
+      ui();
+      if (++sinceSave >= 25) {
+        sinceSave = 0;
+        rec.job = { scope, total: rt.total, done: rt.done, failed: rt.failed, status: 'running' };
+        saveDlState();
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  rt.running = false;
+
+  // Never trust the counters: re-read what is REALLY stored before saying anything.
+  const haveNow = (await audioStoreListAll()).get(reciterId) || new Set();
+  const stored = queue.filter(it => haveNow.has(key(it))).length;
+  const allDone = stored === queue.length;
+  const full = haveNow.size >= TOTAL_AYAHS;
+  const status = allDone ? 'complete' : (rt.quota ? 'quota' : (rt.cancelled ? 'stopped' : 'partial'));
+  offlineDownloadedReciters[reciterId] = {
+    fullOfflineReady: full,
+    cachedAyahsCount: haveNow.size,
+    updatedAt: new Date().toLocaleDateString('ar-EG'),
+    job: { scope, total: queue.length, done: stored, failed: queue.length - stored, status }
+  };
+  saveDlState();
+
+  if (allDone) {
+    dlSetStatus(reciterId, isFullQuran
+      ? `✔ تم حفظ المصحف كاملاً (${toArabicNum(haveNow.size)} آية) بعد التحقق من كل الملفات`
+      : `✔ تم حفظ السورة والصفحة بالكامل بعد التحقق (${toArabicNum(stored)} آية)`, 100);
+  } else if (rt.quota) {
+    dlSetStatus(reciterId, `⚠ المساحة غير كافية. محفوظ ${toArabicNum(stored)} من ${toArabicNum(queue.length)} آية.`);
+    appDialog('لا توجد مساحة تخزين كافية داخل التطبيق لإكمال التنزيل. افتح مساحة على الهاتف ثم اضغط التنزيل مرة أخرى للمتابعة.');
+  } else if (rt.cancelled) {
+    dlSetStatus(reciterId, `⏹ تم الإيقاف. محفوظ ${toArabicNum(stored)} من ${toArabicNum(queue.length)} آية — اضغط التنزيل للمتابعة.`);
+  } else {
+    dlSetStatus(reciterId, `⚠ تنزيل غير مكتمل: محفوظ ${toArabicNum(stored)} من ${toArabicNum(queue.length)} آية. اضغط التنزيل مرة أخرى للمتابعة.`);
   }
   setTimeout(() => renderRecitersDownloadCards(), 600);
 }
+
+// After the app is reopened: recount what is really on the device and mark interrupted jobs.
+async function restoreDownloadState() {
+  try {
+    const be = await audioBackend();
+    if (be === 'none') return;
+    const all = await audioStoreListAll();
+    let changed = false;
+    RECITERS_CATALOG.forEach(r => {
+      const have = all.get(r.id);
+      const info = offlineDownloadedReciters[r.id];
+      const n = have ? have.size : 0;
+      if (!info && n === 0) return;
+      const next = Object.assign({}, info || {});
+      next.cachedAyahsCount = n;
+      next.fullOfflineReady = n >= TOTAL_AYAHS;
+      if (next.job && next.job.status === 'running') {
+        next.job = Object.assign({}, next.job, { status: 'interrupted' });
+        if (next.job.scope === 'full') next.job.done = Math.min(n, next.job.total || TOTAL_AYAHS);   // real count, not the last autosave
+      }
+      if (JSON.stringify(next) !== JSON.stringify(info)) { offlineDownloadedReciters[r.id] = next; changed = true; }
+    });
+    if (changed) saveDlState();
+    renderRecitersDownloadCards();
+  } catch (_) {}
+}
+setTimeout(restoreDownloadState, 800);
 
 // ==========================================================================
 // SYNCHRONIZED AYAH SELECTION, SHEIKH AUDIO HIGHLIGHTING & CLICK-TO-JUMP
@@ -8067,19 +8576,16 @@ async function playSpecificAyahAudio(surahNum, ayahNum) {
   updateSheikhPlayerBarUI();
   applyAyahSelectionAndPlayingHighlights();
 
-  // Check Offline CacheStorage first!
+  // Check the offline store first (CacheStorage or IndexedDB), otherwise stream and keep a copy
   let playSrc = remoteUrl;
   try {
-    if ('caches' in window) {
-      const cache = await caches.open('tasmee-offline-audio-v1');
-      const cachedResp = await cache.match(remoteUrl);
-      if (cachedResp) {
-        const blob = await cachedResp.blob();
-        playSrc = URL.createObjectURL(blob);
-      } else if (navigator.onLine) {
-        // Cache in background for future offline use
-        cacheAyahAudioOffline(selectedReciterId, surahNum, ayahNum);
-      }
+    const blob = await audioStoreGet(remoteUrl);
+    if (blob) {
+      if (_lastAudioObjUrl) { try { URL.revokeObjectURL(_lastAudioObjUrl); } catch (_) {} }
+      _lastAudioObjUrl = URL.createObjectURL(blob);
+      playSrc = _lastAudioObjUrl;
+    } else if (navigator.onLine) {
+      cacheAyahAudioOffline(selectedReciterId, surahNum, ayahNum);
     }
   } catch (_) {}
 
@@ -8164,6 +8670,7 @@ function stopSheikhAudioPlayback() {
 // ==========================================================================
 (function init() {
   const savedFontSize = localStorage.getItem('tasmee_font_size') || 26;
+try { const _ss = document.getElementById('cfg-smart-start'); if (_ss) _ss.checked = smartStartEnabled; } catch (_) {}
   adjustFontSize(savedFontSize);
   const afCb = document.getElementById('cfg-autofit'); if (afCb) afCb.checked = autoFitPage;
   document.getElementById('font-slider').value = savedFontSize;
