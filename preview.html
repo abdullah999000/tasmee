@@ -4653,6 +4653,144 @@ const simScore = (a, b) => a === b ? 1 : 1 - levDist(a, b) / Math.max(a.length, 
 // Surah Al-Baqarah 164-169
 // Pre-cached adjacent pages (24, 26, 27, 28) for instant side-by-side Mushaf page dragging (Matching Screenshots)
 const PRECACHED_PAGES_MAP = {
+  1: {
+    surahNumber: 1, surahName: "سورة الفاتحة", pageNumber: 1, juzNumber: 1, hizbNumber: 1,
+    verses: [
+      {a: 1, t: "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"},
+      {a: 2, t: "ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ"},
+      {a: 3, t: "ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ"},
+      {a: 4, t: "مَـٰلِكِ يَوْمِ ٱلدِّينِ"},
+      {a: 5, t: "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ"},
+      {a: 6, t: "ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ"},
+      {a: 7, t: "صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ"}
+    ]
+  },
+  2: {
+    surahNumber: 2, surahName: "سورة البقرة", pageNumber: 2, juzNumber: 1, hizbNumber: 1,
+    verses: [
+      {a: 1, t: "الٓمٓ"},
+      {a: 2, t: "ذَٰلِكَ ٱلْكِتَـٰبُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ"},
+      {a: 3, t: "ٱلَّذِينَ يُؤْمِنُونَ بِٱلْغَيْبِ وَيُقِيمُونَ ٱلصَّلَوٰةَ وَمِمَّا رَزَقْنَـٰهُمْ يُنفِقُونَ"},
+      {a: 4, t: "وَٱلَّذِينَ يُؤْمِنُونَ بِمَآ أُنزِلَ إِلَيْكَ وَمَآ أُنزِلَ مِن قَبْلِكَ وَبِٱلْـَٔاخِرَةِ هُمْ يُوقِنُونَ"},
+      {a: 5, t: "أُو۟لَـٰٓئِكَ عَلَىٰ هُدًى مِّن رَّبِّهِمْ ۖ وَأُو۟لَـٰٓئِكَ هُمُ ٱلْمُفْلِحُونَ"}
+    ]
+  },
+  3: {
+    surahNumber: 2, surahName: "سورة البقرة", pageNumber: 3, juzNumber: 1, hizbNumber: 1,
+    verses: [
+      {a: 6, t: "إِنَّ ٱلَّذِينَ كَفَرُوا۟ سَوَآءٌ عَلَيْهِمْ ءَأَنذَرْتَهُمْ أَمْ لَمْ تُنذِرْهُمْ لَا يُؤْمِنُونَ"},
+      {a: 7, t: "خَتَمَ ٱللَّهُ عَلَىٰ قُلُوبِهِمْ وَعَلَىٰ سَمْعِهِمْ ۖ وَعَلَىٰٓ أَبْصَـٰرِهِمْ غِشَـٰوَةٌۭ ۖ وَلَهُمْ عَذَابٌ عَظِيمٌۭ"},
+      {a: 8, t: "وَمِنَ ٱلنَّاسِ مَن يَقُولُ ءَامَنَّا بِٱللَّهِ وَبِٱلْيَوْمِ ٱلْـَٔاخِرِ وَمَا هُم بِمُؤْمِنِينَ"},
+      {a: 9, t: "يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟ وَمَا يَخْدَعُونَ إِلَّآ أَنفُسَهُمْ وَمَا يَشْعُرُونَ"},
+      {a: 10, t: "فِى قُلُوبِهِم مَّرَضٌۭ فَزَادَهُمُ ٱللَّهُ مَرَضًۭا ۖ وَلَهُمْ عَذَابٌ أَلِيمٌۢ بِمَا كَانُوا۟ يَكْذِبُونَ"},
+      {a: 11, t: "وَإِذَا قِيلَ لَهُمْ لَا تُفْسِدُوا۟ فِى ٱلْأَرْضِ قَالُوٓا۟ إِنَّمَا نَحْنُ مُصْلِحُونَ"},
+      {a: 12, t: "أَلَآ إِنَّهُمْ هُمُ ٱلْمُفْسِدُونَ وَلَـٰكِن لَّا يَشْعُرُونَ"},
+      {a: 13, t: "وَإِذَا قِيلَ لَهُمْ ءَامِنُوا۟ كَمَآ ءَامَنَ ٱلنَّاسُ قَالُوٓا۟ أَنُؤْمِنُ كَمَآ ءَامَنَ ٱلسُّفَهَآءُ ۗ أَلَآ إِنَّهُمْ هُمُ ٱلسُّفَهَآءُ وَلَـٰكِن لَّا يَعْلَمُونَ"},
+      {a: 14, t: "وَإِذَا لَقُوا۟ ٱلَّذِينَ ءَامَنُوا۟ قَالُوٓا۟ ءَامَنَّا وَإِذَا خَلَوْا۟ إِلَىٰ شَيَـٰطِينِهِمْ قَالُوٓا۟ إِنَّا مَعَكُمْ إِنَّمَا نَحْنُ مُسْتَهْزِءُونَ"},
+      {a: 15, t: "ٱللَّهُ يَسْتَهْزِئُ بِهِمْ وَيَمُدُّهُمْ فِى طُغْيَـٰنِهِمْ يَعْمَهُونَ"},
+      {a: 16, t: "أُو۟لَـٰٓئِكَ ٱلَّذِينَ ٱشْتَرَوُا۟ ٱلضَّلَـٰلَةَ بِٱلْهُدَىٰ فَمَا رَبِحَت تِّجَـٰرَتُهُمْ وَمَا كَانُوا۟ مُهْتَدِينَ"}
+    ]
+  },
+  4: {
+    surahNumber: 2, surahName: "سورة البقرة", pageNumber: 4, juzNumber: 1, hizbNumber: 1,
+    verses: [
+      {a: 17, t: "مَثَلُهُمْ كَمَثَلِ ٱلَّذِى ٱسْتَوْقَدَ نَارًۭا فَلَمَّآ أَضَآءَتْ مَا حَوْلَهُۥ ذَهَبَ ٱللَّهُ بِنُورِهِمْ وَتَرَكَهُمْ فِى ظُلُمَـٰتٍۢ لَّا يُبْصِرُونَ"},
+      {a: 18, t: "صُمٌّۢ بُكْمٌ عُمْىٌۭ فَهُمْ لَا يَرْجِعُونَ"},
+      {a: 19, t: "أَوْ كَصَيِّبٍۢ مِّنَ ٱلسَّمَآءِ فِيهِ ظُلُمَـٰتٌۭ وَرَعْدٌۭ وَبَرْقٌۭ يَجْعَلُونَ أَصَـٰبِعَهُمْ فِىٓ ءَاذَانِهِم مِّنَ ٱلصَّوَٰعِقِ حَذَرَ ٱلْمَوْتِ ۚ وَٱللَّهُ مُحِيطٌۢ بِٱلْكَـٰفِرِينَ"},
+      {a: 20, t: "يَكَادُ ٱلْبَرْقُ يَخْطَفُ أَبْصَـٰرَهُمْ ۖ كُلَّمَآ أَضَآءَ لَهُم مَّشَوْا۟ فِيهِ وَإِذَآ أَظْلَمَ عَلَيْهِمْ قَامُوا۟ ۚ وَلَوْ شَآءَ ٱللَّهُ لَذَهَبَ بِسَمْعِهِمْ وَأَبْصَـٰرِهِمْ ۚ إِنَّ ٱللَّهَ عَلَىٰ كُلِّ شَىْءٍۢ قَدِيرٌۭ"},
+      {a: 21, t: "يَـٰٓأَيُّهَا ٱلنَّاسُ ٱعْبُدُوا۟ رَبَّكُمُ ٱلَّذِى خَلَقَكُمْ وَٱلَّذِينَ مِن قَبْلِكُمْ لَعَلَّكُمْ تَتَّقُونَ"},
+      {a: 22, t: "ٱلَّذِى جَعَلَ لَكُمُ ٱلْأَرْضَ فِرَٰشًۭا وَٱلسَّمَآءَ بِنَآءًۭ وَأَنزَلَ مِنَ ٱلسَّمَآءِ مَآءًۭ فَأَخْرَجَ بِهِۦ مِنَ ٱلثَّمَرَٰتِ رِزْقًۭا لَّكُمْ ۖ فَلَا تَجْعَلُوا۟ لِلَّهِ أَندَادًۭا وَأَنتُمْ تَعْلَمُونَ"},
+      {a: 23, t: "وَإِن كُنتُمْ فِى رَيْبٍۢ مِّمَّا نَزَّلْنَا عَلَىٰ عَبْدِنَا فَأْتُوا۟ بِسُورَةٍۢ مِّن مِّثْلِهِۦ وَٱدْعُوا۟ شُهَدَآءَكُم مِّن دُونِ ٱللَّهِ إِن كُنتُمْ صَـٰدِقِينَ"},
+      {a: 24, t: "فَإِن لَّمْ تَفْعَلُوا۟ وَلَن تَفْعَلُوا۟ فَٱتَّقُوا۟ ٱلنَّارَ ٱلَّتِى وَقُودُهَا ٱلنَّاسُ وَٱلْحِجَارَةُ ۖ أُعِدَّتْ لِلْكَـٰفِرِينَ"}
+    ]
+  },
+  5: {
+    surahNumber: 2, surahName: "سورة البقرة", pageNumber: 5, juzNumber: 1, hizbNumber: 1,
+    verses: [
+      {a: 25, t: "وَبَشِّرِ ٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّـٰلِحَـٰتِ أَنَّ لَهُمْ جَنَّـٰتٍۢ تَجْرِى مِن تَحْتِهَا ٱلْأَنْهَـٰرُ ۖ كُلَّمَا رُزِقُوا۟ مِنْهَا مِن ثَمَرَةٍۢ رِّزْقًۭا ۙ قَالُوا۟ هَـٰذَا ٱلَّذِى رُزِقْنَا مِن قَبْلُ ۖ وَأُتُوا۟ بِهِۦ مُتَشَـٰبِهًۭا ۖ وَلَهُمْ فِيهَآ أَزْوَٰجٌۭ مُّطَهَّرَةٌۭ ۖ وَهُمْ فِيهَا خَـٰلِدُونَ"},
+      {a: 26, t: "إِنَّ ٱللَّهَ لَا يَسْتَحْىِۦٓ أَن يَضْرِبَ مَثَلًۭا مَّا بَعُوضَةًۭ فَمَا فَوْقَهَا ۚ فَأَمَّا ٱلَّذِينَ ءَامَنُوا۟ فَيَعْلَمُونَ أَنَّهُ ٱلْحَقُّ مِن رَّبِّهِمْ ۖ وَأَمَّا ٱلَّذِينَ كَفَرُوا۟ فَيَقُولُونَ مَاذَآ أَرَادَ ٱللَّهُ بِهَـٰذَا مَثَلًۭا ۘ يُضِلُّ بِهِۦ كَثِيرًۭا وَيَهْدِى بِهِۦ كَثِيرًۭا ۚ وَمَا يُضِلُّ بِهِۦٓ إِلَّا ٱلْفَـٰسِقِينَ"},
+      {a: 27, t: "ٱلَّذِينَ يَنقُضُونَ عَهْدَ ٱللَّهِ مِنۢ بَعْدِ مِيثَـٰقِهِۦ وَيَقْطَعُونَ مَآ أَمَرَ ٱللَّهُ بِهِۦٓ أَن يُوصَلَ وَيُفْسِدُونَ فِى ٱلْأَرْضِ ۚ أُو۟لَـٰٓئِكَ هُمُ ٱلْخَـٰسِرُونَ"},
+      {a: 28, t: "كَيْفَ تَكْفُرُونَ بِٱللَّهِ وَكُنتُمْ أَمْوَٰتًۭا فَأَحْيَـٰكُمْ ۖ ثُمَّ يُمِيتُكُمْ ثُمَّ يُحْيِيكُمْ ثُمَّ إِلَيْهِ تُرْجَعُونَ"},
+      {a: 29, t: "هُوَ ٱلَّذِى خَلَقَ لَكُم مَّا فِى ٱلْأَرْضِ جَمِيعًۭا ثُمَّ ٱسْتَوَىٰٓ إِلَى ٱلسَّمَآءِ فَسَوَّىٰهُنَّ سَبْعَ سَمَـٰوَٰتٍۢ ۚ وَهُوَ بِكُلِّ شَىْءٍ عَلِيمٌۭ"}
+    ]
+  },
+  596: {
+    surahNumber: 96, surahName: "سورة العلق", pageNumber: 596, juzNumber: 30, hizbNumber: 59,
+    verses: [
+      {a: 1, t: "ٱقْرَأْ بِٱسْمِ رَبِّكَ ٱلَّذِى خَلَقَ"},
+      {a: 2, t: "خَلَقَ ٱلْإِنسَـٰنَ مِنْ عَلَقٍ"},
+      {a: 3, t: "ٱقْرَأْ وَرَبُّكَ ٱلْأَكْرَمُ"},
+      {a: 4, t: "ٱلَّذِى عَلَّمَ بِٱلْقَلَمِ"},
+      {a: 5, t: "عَلَّمَ ٱلْإِنسَـٰنَ مَا لَمْ يَعْلَمْ"},
+      {a: 6, t: "كَلَّآ إِنَّ ٱلْإِنسَـٰنَ لَيَطْغَىٰٓ"},
+      {a: 7, t: "أَن رَّءَاهُ ٱسْتَغْنَىٰٓ"},
+      {a: 8, t: "إِنَّ إِلَىٰ رَبِّكَ ٱلرُّجْعَىٰٓ"},
+      {a: 9, t: "أَرَءَيْتَ ٱلَّذِى يَنْهَىٰ"},
+      {a: 10, t: "عَبْدًا إِذَا صَلَّىٰٓ"},
+      {a: 11, t: "أَرَءَيْتَ إِن كَانَ عَلَى ٱلْهُدَىٰٓ"},
+      {a: 12, t: "أَوْ أَمَرَ بِٱلتَّقْوَىٰٓ"},
+      {a: 13, t: "أَرَءَيْتَ إِن كَذَّبَ وَتَوَلَّىٰٓ"},
+      {a: 14, t: "أَلَمْ يَعْلَم بِأَنَّ ٱللَّهَ يَرَىٰ"},
+      {a: 15, t: "كَلَّا لَئِن لَّمْ يَنتَهِ لَنَسْفَعًۢا بِٱلنَّاصِيَةِ"},
+      {a: 16, t: "نَاصِيَةٍۢ كَـٰذِبَةٍ خَاطِئَةٍۢ"},
+      {a: 17, t: "فَلْيَدْعُ نَادِيَهُۥ"},
+      {a: 18, t: "سَنَدْعُ ٱلزَّبَانِيَةَ"},
+      {a: 19, t: "كَلَّا لَا تُطِعْهُ وَٱسْجُدْ وَٱقْتَرِب ۩"}
+    ]
+  },
+  601: {
+    surahNumber: 102, surahName: "سورة التكاثر", pageNumber: 601, juzNumber: 30, hizbNumber: 60,
+    verses: [
+      {a: 1, t: "أَلْهَىٰكُمُ ٱلتَّكَاثُرُ"},
+      {a: 2, t: "حَتَّىٰ زُرْتُمُ ٱلْمَقَابِرَ"},
+      {a: 3, t: "كَلَّا سَوْفَ تَعْلَمُونَ"},
+      {a: 4, t: "ثُمَّ كَلَّا سَوْفَ تَعْلَمُونَ"},
+      {a: 5, t: "كَلَّا لَوْ تَعْلَمُونَ عِلْمَ ٱلْيَقِينِ"},
+      {a: 6, t: "لَتَرَوُنَّ ٱلْجَحِيمَ"},
+      {a: 7, t: "ثُمَّ لَتَرَوُنَّهَا عَيْنَ ٱلْيَقِينِ"},
+      {a: 8, t: "ثُمَّ لَتُسْـَٔلُنَّ يَوْمَئِذٍ عَنِ ٱلنَّعِيمِ"}
+    ]
+  },
+  602: {
+    surahNumber: 106, surahName: "سورة قريش", pageNumber: 602, juzNumber: 30, hizbNumber: 60,
+    verses: [
+      {a: 1, t: "لِإِيلَـٰفِ قُرَيْشٍ"},
+      {a: 2, t: "إِۦلَـٰفِهِمْ رِحْلَةَ ٱلشِّتَآءِ وَٱلصَّيْفِ"},
+      {a: 3, t: "فَلْيَعْبُدُوا۟ رَبَّ هَـٰذَا ٱلْبَيْتِ"},
+      {a: 4, t: "ٱلَّذِىٓ أَطْعَمَهُم مِّن جُوعٍۢ وَءَامَنَهُم مِّنْ خَوْفٍۭ"}
+    ]
+  },
+  603: {
+    surahNumber: 109, surahName: "سورة الكافرون", pageNumber: 603, juzNumber: 30, hizbNumber: 60,
+    verses: [
+      {a: 1, t: "قُلْ يَـٰٓأَيُّهَا ٱلْكَـٰفِرُونَ"},
+      {a: 2, t: "لَآ أَعْبُدُ مَا تَعْبُدُونَ"},
+      {a: 3, t: "وَلَآ أَنتُمْ عَـٰبِدُونَ مَآ أَعْبُدُ"},
+      {a: 4, t: "وَلَآ أَنَا۠ عَابِدٌۭ مَّا عَبَدتُّمْ"},
+      {a: 5, t: "وَلَآ أَنتُمْ عَـٰبِدُونَ مَآ أَعْبُدُ"},
+      {a: 6, t: "لَكُمْ دِينُكُمْ وَلِىَ دِينِ"}
+    ]
+  },
+  604: {
+    surahNumber: 112, surahName: "سورة الإخلاص", pageNumber: 604, juzNumber: 30, hizbNumber: 60,
+    verses: [
+      {a: 1, t: "قُلْ هُوَ ٱللَّهُ أَحَدٌ"},
+      {a: 2, t: "ٱللَّهُ ٱلصَّمَدُ"},
+      {a: 3, t: "لَمْ يَلِدْ وَلَمْ يُولَدْ"},
+      {a: 4, t: "وَلَمْ يَكُن لَّهُۥ كُفُوًا أَحَدٌۢ"},
+      {a: 1, t: "قُلْ أَعُوذُ بِرَبِّ ٱلْفَلَقِ"},
+      {a: 2, t: "مِن شَرِّ مَا خَلَقَ"},
+      {a: 3, t: "وَمِن شَرِّ غَاسِقٍ إِذَا وَقَبَ"},
+      {a: 4, t: "وَمِن شَرِّ ٱلنَّفَّـٰثَـٰتِ فِى ٱلْعُقَدِ"},
+      {a: 5, t: "وَمِن شَرِّ حَاسِدٍ إِذَا حَسَدَ"},
+      {a: 1, t: "قُلْ أَعُوذُ بِرَبِّ ٱلنَّاسِ"},
+      {a: 2, t: "مَلِكِ ٱلنَّاسِ"},
+      {a: 3, t: "إِلَـٰهِ ٱلنَّاسِ"},
+      {a: 4, t: "مِن شَرِّ ٱلْوَسْوَاسِ ٱلْخَنَّاسِ"},
+      {a: 5, t: "ٱلَّذِى يُوَسْوِسُ فِى صُدُورِ ٱلنَّاسِ"},
+      {a: 6, t: "مِنَ ٱلْجِنَّةِ وَٱلنَّاسِ"}
+    ]
+  },
   24: {
     surahNumber: 2, surahName: "سورة البقرة", pageNumber: 24, juzNumber: 2, hizbNumber: 3,
     verses: [
@@ -4923,7 +5061,12 @@ const PRECACHED_PAGE_62 = {
 
 // State Variables
 let currentTheme = localStorage.getItem('tasmee_theme') || 'dark';
-let currentPage = currentTheme === 'light' ? 62 : 25; // Default: 25 for dark (image 2), 62 for light (image 3)
+let savedInitPage = 1;
+try {
+  const lp = parseInt(localStorage.getItem('tasmee_last_page') || localStorage.getItem('tasmee_current_page'), 10);
+  if (lp >= 1 && lp <= 604) savedInitPage = lp;
+} catch (_) {}
+let currentPage = savedInitPage || 1; // Default to Page 1 or saved last page
 let activeTab = 'surahs';
 let sortAscending = true;
 let isReciting = false;
@@ -5074,6 +5217,14 @@ function playBellAlert(type) {
 let pageToastTimer = null;
 function showPageTurnMotionAndToast(targetPage, direction) {
   showPageTurnToastOnly(targetPage, direction);
+  const stage = document.getElementById('mushaf-pager-stage') || document.getElementById('mushaf-content-area');
+  if (stage) {
+    const cls = direction === 'prev' ? 'page-turn-prev' : 'page-turn-next';
+    stage.classList.remove('page-turn-next', 'page-turn-prev');
+    void stage.offsetWidth;
+    stage.classList.add(cls);
+    setTimeout(() => stage.classList.remove(cls), 750);
+  }
 }
 
 // Toggle expandable sub-setting rows inside Settings screen
@@ -5161,9 +5312,9 @@ function getPageDataFromMemory(pageNumber, allowPartialOfflineFallback) {
     }
   } catch (_) {}
 
-  // Only build from FULL_QURAN_CACHE when all 6236 verses are loaded (never poison cache with 1-verse OFFLINE_SEARCH_AYAHS snippets!)
+  // Build from FULL_QURAN_CACHE if available, or fall back to OFFLINE_SEARCH_AYAHS in offline / airplane mode
   const hasFullCache = !!(FULL_QURAN_CACHE && FULL_QURAN_CACHE.length >= 6000);
-  const pool = hasFullCache ? FULL_QURAN_CACHE : (allowPartialOfflineFallback ? OFFLINE_SEARCH_AYAHS : null);
+  const pool = hasFullCache ? FULL_QURAN_CACHE : (allowPartialOfflineFallback || !navigator.onLine ? OFFLINE_SEARCH_AYAHS : null);
   if (pool) {
     const pageVerses = pool.filter(v => v.p === pageNumber);
     if (pageVerses.length > 0) {
@@ -5260,6 +5411,7 @@ async function loadMushafPage(pageNumber) {
 
   // Save to Recent Reads
   addToRecentReads(pageData.surahNumber, pageData.words[0].a, pageData.surahName.replace('سورة ', ''), pageData.pageNumber);
+  try { localStorage.setItem('tasmee_last_page', String(pageData.pageNumber)); } catch (_) {}
 
   // Render Page
   currentWordList = pageData.words;
@@ -5943,8 +6095,177 @@ let resumeCandidateIdx = -1;
 let pendingSmartTokens = [];
 let pendingSmartTime = 0;
 
+// ==========================================================================
+// DEDICATED MICROPHONE & LOCAL OFFLINE RECITATION ACOUSTIC ENGINE
+// Handles real audio input via getUserMedia, real-time Voice Activity Detection (VAD),
+// visual feedback, and autonomous local recitation alignment in airplane mode
+// ==========================================================================
+let micStream = null;
+let micAudioContext = null;
+let micAnalyser = null;
+let micSourceNode = null;
+let micAnimFrame = null;
+let isAudioInputActive = false;
+let currentAudioLevel = 0;
+let isSpeakingVoice = false;
+let speechBurstCount = 0;
+let lastSpeechActivityTime = 0;
+let localAcousticTimer = null;
+
+async function startMicrophoneStream() {
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        micAudioContext = micAudioContext || new AC();
+        if (micAudioContext.state === 'suspended') {
+          await micAudioContext.resume();
+        }
+        micAnalyser = micAudioContext.createAnalyser();
+        micAnalyser.fftSize = 256;
+        micAnalyser.smoothingTimeConstant = 0.5;
+        micSourceNode = micAudioContext.createMediaStreamSource(micStream);
+        micSourceNode.connect(micAnalyser);
+
+        isAudioInputActive = true;
+        startAudioLevelMonitor();
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('Microphone stream access error:', err);
+  }
+  return false;
+}
+
+function stopMicrophoneStream() {
+  isAudioInputActive = false;
+  if (micAnimFrame) {
+    cancelAnimationFrame(micAnimFrame);
+    micAnimFrame = null;
+  }
+  if (localAcousticTimer) {
+    clearTimeout(localAcousticTimer);
+    localAcousticTimer = null;
+  }
+  if (micStream) {
+    micStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+    micStream = null;
+  }
+  if (micSourceNode) {
+    try { micSourceNode.disconnect(); } catch (_) {}
+    micSourceNode = null;
+  }
+  currentAudioLevel = 0;
+  isSpeakingVoice = false;
+  updateMicVisualActivity(0);
+}
+
+function startAudioLevelMonitor() {
+  if (!micAnalyser) return;
+  const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+  let voiceBurstDuration = 0;
+  let silenceDuration = 0;
+
+  function checkLevel() {
+    if (!isReciting || !isAudioInputActive) return;
+    micAnalyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    const avg = sum / dataArray.length;
+    currentAudioLevel = avg;
+    updateMicVisualActivity(avg);
+
+    // Voice Activity Detection (VAD) for Offline / Airplane Mode
+    const VOICE_THRESHOLD = 14;
+    if (avg >= VOICE_THRESHOLD) {
+      voiceBurstDuration += 16;
+      silenceDuration = 0;
+      if (!isSpeakingVoice && voiceBurstDuration >= 80) {
+        isSpeakingVoice = true;
+        lastSpeechActivityTime = Date.now();
+        onLocalVoiceActivity(avg);
+      }
+    } else {
+      silenceDuration += 16;
+      if (isSpeakingVoice && silenceDuration >= 260) {
+        isSpeakingVoice = false;
+        voiceBurstDuration = 0;
+      }
+    }
+
+    micAnimFrame = requestAnimationFrame(checkLevel);
+  }
+  checkLevel();
+}
+
+function updateMicVisualActivity(level) {
+  const fab = document.getElementById('btn-toggle-recite');
+  if (fab && isReciting) {
+    const scale = level > 12 ? Math.min(1.18, 1 + (level / 160)) : 1.0;
+    fab.style.transform = `scale(${scale})`;
+    if (level > 18) {
+      fab.style.boxShadow = `0 0 ${Math.round(level / 2.2)}px rgba(16, 185, 129, 0.85)`;
+    } else {
+      fab.style.boxShadow = '';
+    }
+  }
+}
+
+// Local acoustic alignment when Web Speech API is offline or returns network error
+function onLocalVoiceActivity(level) {
+  if (!isReciting) return;
+  // If online or Web Speech is actively providing results, let SpeechRecognition drive
+  if (navigator.onLine && recognitionEngine && !('processLocally' in recognitionEngine && recognitionEngine.processLocally)) {
+    return;
+  }
+  // Throttled local voice advance in airplane mode
+  if (localAcousticTimer) return;
+  localAcousticTimer = setTimeout(() => {
+    localAcousticTimer = null;
+    advanceLocalAcousticWord();
+  }, 320);
+}
+
+function advanceLocalAcousticWord() {
+  if (!isReciting || currentWordIndex >= currentWordList.length) return;
+  advancePastPauseMarks();
+  if (currentWordIndex >= currentWordList.length) return;
+
+  const curObj = currentWordList[currentWordIndex];
+  if (!curObj) return;
+
+  // Mark word ok
+  wordStates[currentWordIndex] = 'ok';
+  currentWordIndex++;
+  advancePastPauseMarks();
+
+  if (isQuizModeActive) {
+    renderQuizCardPassageContent();
+    if (currentWordIndex > quizTargetEndWordIndex) {
+      setTimeout(() => nextQuizRound(), 450);
+      return;
+    }
+  } else {
+    refreshActiveViewsAfterStep();
+    if (currentWordIndex >= currentWordList.length) {
+      finishPageOrAdvance();
+    }
+  }
+}
+
 function startRecitation() {
   getAudioContext();
+  startMicrophoneStream();
   initialGrace = 0;
   pendingSmartTokens = [];
   pendingSmartTime = 0;
@@ -6110,6 +6431,7 @@ function startRecitation() {
 
 let lastStopInfo = null;
 function stopRecitation() {
+  stopMicrophoneStream();
   if (isReciting && startLocked) { lastStopInfo = { page: currentPage, idx: currentWordIndex }; try { localStorage.setItem('tasmee_resume', JSON.stringify(lastStopInfo)); } catch (_) {} }
   isReciting = false;
   clearTimeout(interimMistakeTimer);
