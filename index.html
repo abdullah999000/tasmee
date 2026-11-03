@@ -6193,7 +6193,6 @@ function startAudioLevelMonitor() {
       if (!isSpeakingVoice && voiceBurstDuration >= 80) {
         isSpeakingVoice = true;
         lastSpeechActivityTime = Date.now();
-        onLocalVoiceActivity(avg);
       }
     } else {
       silenceDuration += 16;
@@ -6221,47 +6220,6 @@ function updateMicVisualActivity(level) {
   }
 }
 
-// Local acoustic alignment when Web Speech API is offline or returns network error
-function onLocalVoiceActivity(level) {
-  if (!isReciting) return;
-  // If online or Web Speech is actively providing results, let SpeechRecognition drive
-  if (navigator.onLine && recognitionEngine && !('processLocally' in recognitionEngine && recognitionEngine.processLocally)) {
-    return;
-  }
-  // Throttled local voice advance in airplane mode
-  if (localAcousticTimer) return;
-  localAcousticTimer = setTimeout(() => {
-    localAcousticTimer = null;
-    advanceLocalAcousticWord();
-  }, 320);
-}
-
-function advanceLocalAcousticWord() {
-  if (!isReciting || currentWordIndex >= currentWordList.length) return;
-  advancePastPauseMarks();
-  if (currentWordIndex >= currentWordList.length) return;
-
-  const curObj = currentWordList[currentWordIndex];
-  if (!curObj) return;
-
-  // Mark word ok
-  wordStates[currentWordIndex] = 'ok';
-  currentWordIndex++;
-  advancePastPauseMarks();
-
-  if (isQuizModeActive) {
-    renderQuizCardPassageContent();
-    if (currentWordIndex > quizTargetEndWordIndex) {
-      setTimeout(() => nextQuizRound(), 450);
-      return;
-    }
-  } else {
-    refreshActiveViewsAfterStep();
-    if (currentWordIndex >= currentWordList.length) {
-      finishPageOrAdvance();
-    }
-  }
-}
 
 function startRecitation() {
   getAudioContext();
