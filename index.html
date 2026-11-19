@@ -5921,10 +5921,19 @@ let interimMistakeTimer = null;
 let lastMistakeAlertTime = 0;
 let sessionErrorKeys = new Set();
 let lastAlternatives = [];
-function altSaysCorrect(expected) {
-  for (const alt of lastAlternatives) {
-    const toks = normArabic(alt).split(/\s+/).filter(Boolean).slice(-4);
-    for (const t of toks) { if (isWordMatch(t, expected)) return true; }
+function altSaysCorrect(expected, tokenIdxFromEnd) {
+  if (!expected || !lastAlternatives || lastAlternatives.length <= 1) return false;
+  const maxTail = typeof tokenIdxFromEnd === 'number' ? Math.max(3, tokenIdxFromEnd + 2) : 4;
+  for (let aIdx = 1; aIdx < lastAlternatives.length; aIdx++) {
+    const alt = lastAlternatives[aIdx];
+    if (!alt) continue;
+    const raw = normArabic(alt).split(/\s+/).filter(Boolean);
+    const toks = normalizeTokenStream(raw).slice(-maxTail);
+    for (let k = 0; k < toks.length; k++) {
+      if (isWordMatch(toks[k], expected)) return true;
+      if (k + 1 < toks.length && isWordMatch(toks[k] + toks[k + 1], expected)) return true;
+      if (k + 2 < toks.length && isMuqattaahMatch(toks[k] + toks[k + 1] + toks[k + 2], expected)) return true;
+    }
   }
   return false;
 }
@@ -6001,12 +6010,14 @@ function submitQuickLiveInput() {
 }
 
 let pendingMismatchFn = null;
+let pendingMismatchMeta = null;
 
 // Central Mistake Handler: Marks RED + Rings Bell + Counts Error + Strictly Stops or Continues based on stopOnErrorMandatory
 function triggerMistakeOnCurrentWord(spokenToken) {
   if (currentWordIndex >= currentWordList.length) return;
   clearTimeout(interimMistakeTimer);
   pendingMismatchFn = null;
+  pendingMismatchMeta = null;
 
   const currentObj = currentWordList[currentWordIndex];
   const currentExpected = currentObj?.t || '';
@@ -6228,6 +6239,7 @@ function startRecitation() {
   pendingSmartTokens = [];
   pendingSmartTime = 0;
   pendingMismatchFn = null;
+  pendingMismatchMeta = null;
   // resume after a pause: same page, same pointer -> keep errors / progress, AND still allow starting from another place on the page if the user reads elsewhere!
   const resuming = !isReciting && !isQuizModeActive && currentWordIndex > 0 && lastStopInfo &&
     lastStopInfo.page === currentPage && lastStopInfo.idx === currentWordIndex && wordStates.length === currentWordList.length;
@@ -6283,7 +6295,7 @@ function startRecitation() {
   recognitionEngine.lang = 'ar-SA';
   recognitionEngine.continuous = true;
   recognitionEngine.interimResults = true;
-  recognitionEngine.maxAlternatives = 3;
+  recognitionEngine.maxAlternatives = 5;
 
   // CRITICAL FIX: Only set processLocally=true when truly offline (!navigator.onLine).
   // Setting processLocally=true while online causes Chrome/Android WebView to fail if an offline language pack is not installed!
@@ -6365,8 +6377,14 @@ function startRecitation() {
     if (pendingMismatchFn) {
       clearTimeout(interimMistakeTimer);
       const fn = pendingMismatchFn;
+      const meta = pendingMismatchMeta;
       pendingMismatchFn = null;
-      try { fn(); } catch (_) {}
+      pendingMismatchMeta = null;
+      // Do NOT fire a false error when the mic restarts after a short Waqf/breath or mid-word Madd.
+      // Only flush if a non-partial mismatch was already held long enough to be confirmed.
+      if (meta && !meta.isPartial && (Date.now() - meta.createdAt) >= 700) {
+        try { fn(); } catch (_) {}
+      }
     }
     if (!startLocked && latestTokenList && latestTokenList.length > 0) {
       pendingSmartTokens = [...pendingSmartTokens, ...latestTokenList].slice(-5);
@@ -6430,7 +6448,33 @@ const SHORT_PARTICLES = new Set([
   'في', 'من', 'ما', 'لا', 'ان', 'به', 'له', 'عن', 'ام', 'او', 'بل', 'قد', 'هل', 'اذ', 'لو', 'هم', 'يا'
 ]);
 
-// Deep Uthmani-to-Phonetic Normalizer (handles واو الجماعة، الألف الخنجرية، الهمزات)
+// Huruf Muqatta'ah (الحروف المقطعة) spoken forms produced by Arabic Speech Recognition
+const MUQATTAAT_FORMS = {
+  'الم': ['الم', 'الفلامميم', 'الفلاميم', 'الفلالميم', 'الفم'],
+  'المص': ['المص', 'الفلامميمصاد', 'الفلاميمصاد'],
+  'الر': ['الر', 'الفلامرا', 'الفلامراء'],
+  'المر': ['المر', 'الفلامميمرا', 'الفلامميمراء'],
+  'كهيعص': ['كهيعص', 'كافهايعينصاد', 'كافهاياعينصاد', 'كافهايايعينصاد'],
+  'طه': ['طه', 'طاها'],
+  'طسم': ['طسم', 'طاسينميم'],
+  'طس': ['طس', 'طاسين'],
+  'يس': ['يس', 'ياسين'],
+  'ص': ['ص', 'صاد'],
+  'حم': ['حم', 'حاميم'],
+  'عسق': ['عسق', 'عينسينقاف'],
+  'ق': ['ق', 'قاف'],
+  'ن': ['ن', 'نون']
+};
+
+function isMuqattaahMatch(spokenJoined, expectedWord) {
+  const exp = normArabic(expectedWord).replace(/\s+/g, '');
+  const forms = MUQATTAAT_FORMS[exp];
+  if (!forms) return false;
+  const sp = normArabic(spokenJoined).replace(/\s+/g, '');
+  return !!sp && forms.includes(sp);
+}
+
+// Deep Uthmani-to-Phonetic Normalizer (handles واو الجماعة، الألف الخنجرية، الهمزات، المدود)
 function normPhoneticTajweed(s) {
   let n = normArabic(s);
   if (!n) return '';
@@ -6438,32 +6482,155 @@ function normPhoneticTajweed(s) {
     .replace(/\s+/g, '')
     .replace(/وا$/g, 'و')       // Uthmani plural waw+alif (امنوا -> امنو)
     .replace(/^يايها/g, 'ياايها')
+    .replace(/و+/g, 'و')        // Collapse Madd waw elongation
     .replace(/[ءئؤا]/g, '')     // Consonantal skeleton without alifs/hamzas (يتساءلون /ءامنوا / السموت)
     .trim();
 }
 
-function isWordMatch(spokenToken, expectedWord) {
-  if (!spokenToken || !expectedWord) return false;
+// Weighted Arabic phonetic edit distance for non-native learners, beginners, Madd variations, and STT slips.
+// Acoustically close Makharij pairs carry low cost (0.35-0.45), while distinct root consonants keep full cost (1.0).
+const PHONETIC_PAIR_COSTS = {
+  'سص': 0.35, 'صس': 0.35,
+  'تط': 0.35, 'طت': 0.35,
+  'دض': 0.35, 'ضد': 0.35,
+  'ضظ': 0.30, 'ظض': 0.30,
+  'ذز': 0.35, 'زذ': 0.35,
+  'ذظ': 0.35, 'ظذ': 0.35,
+  'زظ': 0.35, 'ظز': 0.35,
+  'ثس': 0.35, 'سث': 0.35,
+  'ثت': 0.40, 'تث': 0.40,
+  'ذد': 0.40, 'دذ': 0.40,
+  'حه': 0.35, 'هح': 0.35,
+  'كق': 0.40, 'قك': 0.40,
+  'عا': 0.40, 'اع': 0.40,
+  'عء': 0.35, 'ءع': 0.35,
+  'غخ': 0.45, 'خغ': 0.45,
+  'قغ': 0.45, 'غق': 0.45,
+  'ته': 0.35, 'هت': 0.35,
+  'اي': 0.35, 'يا': 0.35,
+  'او': 0.45, 'وا': 0.45
+};
+const MADD_VOWEL_CHARS = new Set(['ا', 'و', 'ي', 'ء']);
+
+function arabicPhoneticDist(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = new Array(n + 1);
+  prev[0] = 0;
+  for (let j = 1; j <= n; j++) prev[j] = prev[j - 1] + (MADD_VOWEL_CHARS.has(b[j - 1]) ? 0.35 : 1.0);
+  for (let i = 1; i <= m; i++) {
+    const chA = a[i - 1];
+    const delCost = MADD_VOWEL_CHARS.has(chA) ? 0.35 : 1.0;
+    const curr = new Array(n + 1);
+    curr[0] = prev[0] + delCost;
+    for (let j = 1; j <= n; j++) {
+      const chB = b[j - 1];
+      const insCost = MADD_VOWEL_CHARS.has(chB) ? 0.35 : 1.0;
+      let subCost = 0;
+      if (chA !== chB) {
+        if ((i === m && j === n) && ((chA === 'ه' && chB === 'ت') || (chA === 'ت' && chB === 'ه'))) {
+          subCost = 0.15; // Waqf vs Wasl Taa Marbuta (الصلاه / الصلات، رحمه / رحمت)
+        } else {
+          subCost = PHONETIC_PAIR_COSTS[chA + chB] ?? 1.0;
+        }
+      }
+      curr[j] = Math.min(prev[j] + delCost, curr[j - 1] + insCost, prev[j - 1] + subCost);
+    }
+    prev = curr;
+  }
+  return prev[n];
+}
+
+function phoneticSimScore(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  return Math.max(0, 1 - arabicPhoneticDist(a, b) / Math.max(a.length, b.length));
+}
+
+// Multi-tier Quranic word matcher:
+//   Tier 1: Exact / Uthmani-Imlai orthographic / Waqf-Wasl (ة/ت/ه) / Tanwin (ى/ا) / Muqatta'ah
+//   Tier 2: Madd elongation & Tajweed boundary assimilation (تنوين/إدغام)
+//   Tier 3: Learner / non-native phonetic proximity & minor STT acoustic variation (strictly bounded)
+function getWordMatchTier(spokenToken, expectedWord) {
+  if (!spokenToken || !expectedWord) return 0;
   const normA = normArabic(spokenToken).replace(/\s+/g, '');
   const normB = normArabic(expectedWord).replace(/\s+/g, '');
-  if (!normA || !normB) return false;
-  if (normA === normB) return true;
-  if (normA.replace(/و+/g, 'و') === normB.replace(/و+/g, 'و')) return true;
+  if (!normA || !normB) return 0;
 
-  // Handle Uthmani silent trailing alif (واو الجماعة أو تنوين الفتح عند الوقف) or Uthmani omitted final yaa (الداع/الداعي، دعان/دعاني)
-  if (normA.replace(/ا$/g, '') === normB.replace(/ا$/g, '')) return true;
-  if (Math.min(normA.length, normB.length) >= 3 && normA.replace(/ي$/g, '') === normB.replace(/ي$/g, '')) return true;
+  // --- Tier 1: Exact & Uthmani-Imlai Orthographic ---
+  if (normA === normB) return 1;
+  if (isMuqattaahMatch(normA, normB)) return 1;
+  const wawA = normA.replace(/و+/g, 'و');
+  const wawB = normB.replace(/و+/g, 'و');
+  if (wawA === wawB) return 1;
 
-  // Handle Uthmani internal omitted alifs (e.g. السموت/السماوات، الصبرين/الصابرين، خلدين/خالدين، معدودت/معدودات، هؤلأ/هؤلاء)
+  // Waqf vs Wasl Taa Marbuta (الصلاه / الصلات، رحمت / رحمه، نعمت / نعمه)
+  if (Math.min(normA.length, normB.length) >= 3 && normA.replace(/[ته]$/g, 'ه') === normB.replace(/[ته]$/g, 'ه')) return 1;
+
+  // Trailing silent alif (واو الجماعة أو تنوين الفتح عند الوقف) or Alif Maqsura Tanwin (هدى/هدا) or omitted final yaa (الداع/الداعي)
+  if (normA.replace(/ا$/g, '') === normB.replace(/ا$/g, '')) return 1;
+  if (Math.min(normA.length, normB.length) >= 3 && normA.replace(/[اي]$/g, '') === normB.replace(/[اي]$/g, '')) return 1;
+
+  // Internal omitted alifs (السموت/السماوات، الصبرين/الصابرين، الرحمن/الرحمان، خلدين/خالدين، إبرهيم/إبراهيم)
   const skelA = normSkeleton(spokenToken).replace(/\s+/g, '');
   const skelB = normSkeleton(expectedWord).replace(/\s+/g, '');
-  if (skelA && skelB && skelA.length >= 2 && skelA === skelB) return true;
+  if (skelA && skelB && skelA.length >= 2 && skelA === skelB) return 1;
 
-  // Handle Uthmani hamza/alif seat variations (e.g. يتساءلون/يتسالون، رؤوف/رءوف، يايها/يا أيها) only when all consonants match 100%
+  // Hamza/alif seat variations (يتساءلون/يتسالون، رؤوف/رءوف، يايها/يا أيها) when consonants match 100%
   const phonA = normPhoneticTajweed(spokenToken);
   const phonB = normPhoneticTajweed(expectedWord);
-  if (phonA && phonB && phonA.length >= 3 && phonA === phonB && normA[0] === normB[0]) return true;
+  if (phonA && phonB && phonA.length >= 3 && phonA === phonB && normA[0] === normB[0]) return 1;
 
+  // --- Tier 2: Madd Elongation & Tajweed Assimilation (إدغام / تنوين) ---
+  const flatA = wawA.replace(/(.)\1+/g, '$1');
+  const flatB = wawB.replace(/(.)\1+/g, '$1');
+  if (Math.min(flatA.length, flatB.length) >= 3 && flatA === flatB) return 2;
+
+  // Spoken Tanwin / Idgham trailing 'ن' or 'ل' on short/medium words (e.g. هدى -> هدن/هدل، احد -> احدن، كفوا -> كفون)
+  if (normA.length >= 3 && normB.length >= 3) {
+    const stripTanwinA = normA.replace(/[انيم]$/g, '');
+    const stripTanwinB = normB.replace(/[انيم]$/g, '');
+    if (stripTanwinA.length >= 3 && stripTanwinA === stripTanwinB && normA.endsWith('ن')) return 2;
+    if (normB.endsWith('ي') && (normA === normB.slice(0, -1) + 'ن' || normA === normB.slice(0, -1) + 'ل')) return 2;
+  }
+
+  // --- Tier 3: Phonetically Close Learner / Non-Native / STT Variation ---
+  // Never fuzzy-match short particles or 1-2 letter words (في، من، ما، لا، قل، هم، عن...)
+  const minLen = Math.min(normA.length, normB.length);
+  const maxLen = Math.max(normA.length, normB.length);
+  if (minLen < 3 || SHORT_PARTICLES.has(normB)) return 0;
+  if (Math.abs(normA.length - normB.length) > Math.max(2, Math.floor(maxLen * 0.35))) return 0;
+
+  const dNorm = arabicPhoneticDist(wawA, wawB);
+  const dSkel = (skelA && skelB) ? arabicPhoneticDist(skelA, skelB) : dNorm;
+  const bestD = Math.min(dNorm, dSkel);
+
+  if (maxLen === 3) {
+    // 3-letter words: allow at most ONE close Makhraj pair (e.g. س/ص، ت/ط، ذ/ز، ث/س، ح/ه، ه/ت)
+    if (bestD <= 0.40) return 3;
+  } else if (maxLen === 4) {
+    // 4-letter words: allow up to ~2 close phonetic pairs or 1 pair + 1 vowel/Madd difference
+    if (bestD <= 0.75) return 3;
+  } else {
+    // 5+ letter words: allow proportional close phonetic / Madd / STT tolerance while rejecting different words
+    if (bestD <= 1.65 && (bestD / maxLen) <= 0.22) return 3;
+  }
+
+  return 0;
+}
+
+function isWordMatch(spokenToken, expectedWord) {
+  return getWordMatchTier(spokenToken, expectedWord) > 0;
+}
+
+function isNoiseFragment(token, expected) {
+  const a = normArabic(token).replace(/\s+/g, '');
+  const b = normArabic(expected).replace(/\s+/g, '');
+  if (!a) return true;
+  // Ignore 1-letter stray noise/breath artifacts when expecting a multi-letter Quranic word
+  if (a.length === 1 && b.length >= 3 && !MUQATTAAT_FORMS[b]) return true;
   return false;
 }
 
@@ -6484,7 +6651,7 @@ function normalizeTokenStream(rawTokens) {
   for (let i = 0; i < rawTokens.length; i++) {
     const cur = rawTokens[i];
     const nxt = i + 1 < rawTokens.length ? rawTokens[i + 1] : null;
-    if ((cur === 'و' || cur === 'ف' || cur === 'ب' || cur === 'ل' || cur === 'يا') && nxt) {
+    if ((cur === 'و' || cur === 'ف' || cur === 'ب' || cur === 'ل' || cur === 'يا' || cur === 'ال') && nxt) {
       merged.push(cur + nxt);
       i++;
     } else {
@@ -6680,9 +6847,10 @@ let lastProcessedTokenCount = 0;
 let haltAheadHits = 0;
 let initialGrace = 0;
 
-// Strict word comparison (no fuzzy similarity).
+// High-precision comparison (Tier 1 & 2) used for page-wide smart-start, jumps, and replays.
 function isStrictMatch(spoken, expected) {
-  return isWordMatch(spoken, expected);
+  const tier = getWordMatchTier(spoken, expected);
+  return tier > 0 && tier <= 2;
 }
 
 // ==========================================================================
@@ -6756,8 +6924,19 @@ function bestHeardScore(token, expected) {
   }
   return best;
 }
-// Never auto-correct or replace a non-matching spoken word:
+// Context-verified ASR slip detector:
+// Only accepts a slightly garbled token when the reader fluently spoke the EXACT next Quranic word
+// AND the garbled token is phonetically close to the expected word (never accepts a substituted/different word).
 function isRecognizerSlip(token, expected, nextToken, nextExpected) {
+  if (!token || !expected || !nextToken || !nextExpected) return false;
+  const nextTier = getWordMatchTier(nextToken, nextExpected);
+  if (nextTier === 0 || nextTier > 2) return false;
+  const a = normArabic(token).replace(/\s+/g, '');
+  const b = normArabic(expected).replace(/\s+/g, '');
+  if (!a || !b || b.length < 3 || SHORT_PARTICLES.has(b)) return false;
+  const pSim = phoneticSimScore(a, b);
+  if (pSim >= 0.62) return true;
+  if (isReciting && lastAlternatives.length > 1 && bestHeardScore(token, expected) >= 0.72) return true;
   return false;
 }
 function acceptCurrentWordAsHeard() {
@@ -6919,6 +7098,8 @@ function findJumpIndex(prevToken, token, nextToken, nextNextToken, prevPrevToken
 
 function landOnWord(idx) {
   clearTimeout(interimMistakeTimer);
+  pendingMismatchFn = null;
+  pendingMismatchMeta = null;
   initialGrace = 0; haltAheadHits = 0;
   wordStates[idx] = 'ok';
   wordErrors = wordErrors.filter(e => e.index !== idx);
@@ -6983,15 +7164,41 @@ function resolveMismatch(prevToken, token, prevPrevToken) {
   }
   triggerMistakeOnCurrentWord(token);
 }
-// Wait briefly if interim token is still being articulated, then judge it (and flush immediately if onend fires).
-function scheduleMismatchCheck(gi, token, prevToken, prevPrevToken) {
-  clearTimeout(interimMistakeTimer);
+// Wait with an adaptive confirmation window so streaming ASR revisions, Madd elongations,
+// and slow/beginner articulation never trigger premature false errors.
+function scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, isPartial) {
   const capIdx = currentWordIndex, epoch = utterEpoch;
-  const waitMs = isFastSpeech() ? 350 : 550;
+  // Do not endlessly reset the timer if the exact same unrevised mismatch is still pending.
+  if (pendingMismatchFn && pendingMismatchMeta &&
+      pendingMismatchMeta.capIdx === capIdx &&
+      pendingMismatchMeta.gi === gi &&
+      pendingMismatchMeta.token === token &&
+      pendingMismatchMeta.epoch === epoch) {
+    return;
+  }
+  clearTimeout(interimMistakeTimer);
+  const fast = isFastSpeech();
+  const waitMs = isPartial ? (fast ? 1350 : 1700) : (fast ? 800 : 1100);
+  pendingMismatchMeta = {
+    capIdx, gi, token, epoch,
+    expected: currentWordList[capIdx]?.t || '',
+    createdAt: Date.now(),
+    isPartial: !!isPartial
+  };
   pendingMismatchFn = () => {
     pendingMismatchFn = null;
+    pendingMismatchMeta = null;
     if (!isReciting || epoch !== utterEpoch || currentWordIndex !== capIdx) return;
     if (latestTokenList[gi] !== token) return;
+    // Final check against alternatives before declaring an error
+    const expNow = currentWordList[capIdx]?.t || '';
+    if (altSaysCorrect(expNow, Math.max(0, latestTokenList.length - 1 - gi))) {
+      lastProcessedTokenCount = Math.max(lastProcessedTokenCount, gi + 1);
+      acceptCurrentWordAsHeard();
+      if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return; }
+      refreshActiveViewsAfterStep();
+      return;
+    }
     lastProcessedTokenCount = Math.max(lastProcessedTokenCount, gi + 1);
     resolveMismatch(prevToken, token, prevPrevToken);
   };
@@ -7152,8 +7359,12 @@ function processRecitedText(text, isFinal) {
       const latest = tokens[tokens.length - 1];
       const prev = tokens.length > 1 ? tokens[tokens.length - 2] : '';
       const currentExpected = currentWordList[currentWordIndex]?.t || '';
-      if (isWordMatch(latest, currentExpected) || (prev && isWordMatch(prev + latest, currentExpected))) {
+      if (isWordMatch(latest, currentExpected) ||
+          (prev && isWordMatch(prev + latest, currentExpected)) ||
+          (isReciting && altSaysCorrect(currentExpected, 1))) {
         clearTimeout(interimMistakeTimer);
+        pendingMismatchFn = null;
+        pendingMismatchMeta = null;
         wordStates[currentWordIndex] = 'ok';
         markMistakeMastered(currentPage, currentWordIndex);
         haltError = null;
@@ -7177,9 +7388,11 @@ function processRecitedText(text, isFinal) {
     const gi = startIdx + i;                                   // index of this token in the whole transcript
     const token = newTokens[i];
     const nextToken = gi + 1 < tokens.length ? tokens[gi + 1] : null;
+    const nextNextToken = gi + 2 < tokens.length ? tokens[gi + 2] : null;
     const prevToken = gi - 1 >= 0 ? tokens[gi - 1] : null;
     const prevPrevToken = gi - 2 >= 0 ? tokens[gi - 2] : null;
     const isLastToken = (gi === tokens.length - 1);
+    const tokensAfter = tokens.length - 1 - gi;
     const currentExpected = currentWordList[currentWordIndex]?.t || '';
     let nextExpectedIdx = currentWordIndex + 1;
     while (nextExpectedIdx < currentWordList.length && isQuranPauseMark(currentWordList[nextExpectedIdx]?.t)) nextExpectedIdx++;
@@ -7189,20 +7402,36 @@ function processRecitedText(text, isFinal) {
     while (nextNextExpectedIdx < currentWordList.length && isQuranPauseMark(currentWordList[nextNextExpectedIdx]?.t)) nextNextExpectedIdx++;
     const nextNextExpected = currentWordList[nextNextExpectedIdx]?.t || '';
 
-    const stable = isFinal || !isLastToken || !isPartialOfExpected(token, currentExpected);
-
-    // ---- 1. the word is right (direct / compound / split) ----
-    const directMatch = isWordMatch(token, currentExpected);
+    // ---- 1. the word is right (direct / compound / Muqatta'ah / split / STT alternative / verified slip) ----
+    let directTier = getWordMatchTier(token, currentExpected);
+    // Anti-confusion guard: if token is only a Tier-3 fuzzy match for currentExpected,
+    // but is a Tier-1 exact match for nextExpected (and reader omitted currentExpected), do NOT hide the omission!
+    if (directTier === 3 && nextExpected && getWordMatchTier(token, nextExpected) === 1) {
+      if (isFinal || (nextToken && nextNextExpected && isWordMatch(nextToken, nextNextExpected))) {
+        directTier = 0;
+      }
+    }
+    const directMatch = directTier > 0;
     const compoundWithNext = !directMatch && nextToken && isWordMatch(token + nextToken, currentExpected);
-    const compoundWithPrev = !directMatch && prevToken && isWordMatch(prevToken + token, currentExpected);
-    const splitTwoExpected = !directMatch && !compoundWithNext && !compoundWithPrev && nextExpected && isWordMatch(token, currentExpected + nextExpected);
-    const splitThreeExpected = !directMatch && !compoundWithNext && !compoundWithPrev && !splitTwoExpected && nextExpected && nextNextExpected
+    const compoundWithNext2 = !directMatch && !compoundWithNext && nextToken && nextNextToken &&
+      (isMuqattaahMatch(token + nextToken + nextNextToken, currentExpected) ||
+       (normArabic(currentExpected).length >= 7 && isWordMatch(token + nextToken + nextNextToken, currentExpected)));
+    const compoundWithPrev = !directMatch && !compoundWithNext && !compoundWithNext2 && prevToken && isWordMatch(prevToken + token, currentExpected);
+    const splitTwoExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && nextExpected && isWordMatch(token, currentExpected + nextExpected);
+    const splitThreeExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && nextExpected && nextNextExpected
       && normArabic(currentExpected + nextExpected + nextNextExpected).length >= 7 && isWordMatch(token, currentExpected + nextExpected + nextNextExpected);
+    const altMatch = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected &&
+      isReciting && altSaysCorrect(currentExpected, tokensAfter);
+    const verifiedSlip = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected && !altMatch &&
+      isRecognizerSlip(token, currentExpected, nextToken, nextExpected);
 
-    if (directMatch || compoundWithNext || compoundWithPrev || splitTwoExpected || splitThreeExpected) {
+    if (directMatch || compoundWithNext || compoundWithNext2 || compoundWithPrev || splitTwoExpected || splitThreeExpected || altMatch || verifiedSlip) {
       clearTimeout(interimMistakeTimer);
       pendingMismatchFn = null;
+      pendingMismatchMeta = null;
       wordStates[currentWordIndex] = 'ok';
+      wordErrors = wordErrors.filter(e => e.index !== currentWordIndex);
+      markMistakeMastered(currentPage, currentWordIndex);
       initialGrace = 0;
       haltError = null;
       haltAheadHits = 0;
@@ -7222,12 +7451,19 @@ function processRecitedText(text, isFinal) {
         if (currentWordIndex < currentWordList.length) { wordStates[currentWordIndex] = 'ok'; currentWordIndex++; advancePastPauseMarks(); }
       }
       if (compoundWithNext) i++;
+      if (compoundWithNext2) i += 2;
       lastProcessedTokenCount = startIdx + i + 1;
       checkReplayResume();
 
       if (isQuizModeActive && currentWordIndex > quizTargetEndWordIndex) { setTimeout(() => nextQuizRound(), 400); return; }
       if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
       refreshActiveViewsAfterStep();
+      continue;
+    }
+
+    // ---- 1b. ignore stray 1-letter background noise/breath artifacts ----
+    if (isNoiseFragment(token, currentExpected)) {
+      lastProcessedTokenCount = gi + 1;
       continue;
     }
 
@@ -7239,7 +7475,7 @@ function processRecitedText(text, isFinal) {
       continue;
     }
 
-    // ---- 3. harmless echo of the exact word just read ----
+    // ---- 3. harmless echo of the exact word just read (avoids false errors on breath/ASR duplicate) ----
     if (currentWordIndex > 0 && wordStates[currentWordIndex - 1] === 'ok' && isWordMatch(token, currentWordList[currentWordIndex - 1]?.t || '')) {
       lastProcessedTokenCount = gi + 1;
       continue;
@@ -7253,32 +7489,43 @@ function processRecitedText(text, isFinal) {
       break;
     }
 
-    // ---- 5. When Continue-after-Error mode is ON (stopOnErrorMandatory === false):
-    //         If the student skipped currentExpected and said nextExpected, mark currentExpected RED ('wrong')
-    //         and then accept nextExpected so recitation continues smoothly without auto-correcting the missed word! ----
-    if (!stopOnErrorMandatory && nextExpected && isWordMatch(token, nextExpected)) {
-      lastProcessedTokenCount = startIdx + i + 1;
-      triggerMistakeOnCurrentWord(token);
-      if (currentWordIndex === nextExpectedIdx) {
-        wordStates[currentWordIndex] = 'ok';
-        currentWordIndex++;
-        advancePastPauseMarks();
-        checkReplayResume();
-        if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
-        refreshActiveViewsAfterStep();
+    // ---- 5. Omission detection (reader skipped currentExpected and spoke nextExpected) ----
+    const nextLooksOmitted = !!(nextExpected && isWordMatch(token, nextExpected));
+    const omissionConfirmed = nextLooksOmitted && (
+      isFinal ||
+      (nextToken && nextNextExpected && isWordMatch(nextToken, nextNextExpected))
+    );
+    if (!stopOnErrorMandatory && nextLooksOmitted) {
+      if (omissionConfirmed) {
+        lastProcessedTokenCount = startIdx + i + 1;
+        triggerMistakeOnCurrentWord(token);
+        if (currentWordIndex === nextExpectedIdx) {
+          wordStates[currentWordIndex] = 'ok';
+          currentWordIndex++;
+          advancePastPauseMarks();
+          checkReplayResume();
+          if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); break; }
+          refreshActiveViewsAfterStep();
+        }
+        continue;
+      } else {
+        // Wait briefly on a single unconfirmed interim token in case ASR dropped currentExpected temporarily
+        scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, false);
+        break;
       }
-      continue;
     }
 
-    // ---- 6. A REAL MISTAKE on currentWordIndex:
-    //         - If stopOnErrorMandatory === true (Continue OFF): stops immediately at currentWordIndex, marks RED, rings 3 times + vibrates, and waits!
-    //         - If stopOnErrorMandatory === false (Continue ON): marks currentWordIndex RED (never auto-corrects!), rings 3 times + vibrates, and advances to next word! ----
+    // ---- 6. A REAL MISTAKE on currentWordIndex (confirmed, never premature on unstable interim):
+    //         - Final result, confirmed 2-word omission, or interim token with >= 2 tokens already spoken after it -> trigger mistake.
+    //         - Otherwise (unstable interim / mid-word Madd / short pause) -> defer via adaptive confirmation timer. ----
+    const partial = isPartialOfExpected(token, currentExpected);
+    const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= 2);
     if (stable) {
       lastProcessedTokenCount = gi + 1;
       triggerMistakeOnCurrentWord(token);
       if (stopOnErrorMandatory) break;
     } else {
-      scheduleMismatchCheck(gi, token, prevToken, prevPrevToken);
+      scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, partial);
       break;
     }
   }
