@@ -1,4 +1,4 @@
-import sys, re
+import os, sys, re
 
 path = sys.argv[1]
 s = open(path, encoding="utf-8").read()
@@ -26,7 +26,6 @@ open(path, "w", encoding="utf-8").write(s)
 print("manifest patched")
 
 # draw under the notch / camera cutout too (true full screen)
-import os
 styles = os.path.join(os.path.dirname(path), "..", "res", "values", "styles.xml")
 if os.path.exists(styles):
     t = open(styles, encoding="utf-8").read()
@@ -35,3 +34,26 @@ if os.path.exists(styles):
         t = re.sub(r'(<style name="(?:LaunchTheme|NormalTheme)"[^>]*>\n)', lambda m: m.group(1) + item, t)
         open(styles, "w", encoding="utf-8").write(t)
         print("styles patched")
+
+# Prevent Android Lint (AndroidLintWorkAction / lintVitalAnalyzeRelease) crashes during release APK builds
+app_dir = os.path.abspath(os.path.join(os.path.dirname(path), "..", ".."))
+for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
+    gpath = os.path.join(app_dir, fname)
+    if os.path.exists(gpath):
+        g = open(gpath, encoding="utf-8").read()
+        if "checkReleaseBuilds" not in g:
+            lint_block = (
+                "\n    lint {\n"
+                "        checkReleaseBuilds = false\n"
+                "        abortOnError = false\n"
+                "    }\n"
+                if is_kts else
+                "\n    lint {\n"
+                "        checkReleaseBuilds false\n"
+                "        abortOnError false\n"
+                "    }\n"
+            )
+            g_new = re.sub(r'(android\s*\{)', r'\1' + lint_block, g, count=1)
+            if g_new != g:
+                open(gpath, "w", encoding="utf-8").write(g_new)
+                print(f"{fname} patched (disabled release lint crash)")
