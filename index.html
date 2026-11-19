@@ -3143,6 +3143,244 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
 .app-dialog-btn { flex: 1 1 110px; border: 1px solid rgba(128,128,128,0.4); background: transparent; color: inherit; border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
 .app-dialog-btn.primary { background: #34d399; color: #04130c; border-color: #34d399; }
 .btn-reciter-action.stop-dl { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #f87171; }
+
+/* ==========================================================================
+   AUTHENTIC MADINAH MUSHAF DESIGN SYSTEM (KFGQPC Uthmanic Script HAFS)
+   Unified across ALL 604 pages in BOTH Day Mode & Night Mode
+   ========================================================================== */
+@font-face {
+  font-family: 'KFGQPC Uthmanic Script HAFS';
+  src: url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2') format('woff2'),
+       url('https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --mushaf-font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri Quran', 'Amiri', serif;
+}
+
+/* Eye-comfort Tajweed palette in Night Mode (keeps same layout, switches colors only) */
+html[data-theme="dark"] {
+  --bg-page-dark: #0c0d10;
+  --tj-lazim: #f472b6;
+  --tj-wajib: #fb7185;
+  --tj-jaiz: #fb923c;
+  --tj-tabeei: #fcd34d;
+  --tj-ikhfa: #34d399;
+  --tj-idgham: #94a3b8;
+  --tj-tafkheem: #60a5fa;
+  --tj-qalqalah: #38bdf8;
+}
+html[data-theme="light"] {
+  --bg-page-light: #fbf8f0;
+}
+
+/* Unified Mushaf Card & Ornate Frame (identical geometry in Light & Dark modes) */
+.dark-page-container,
+.tajweed-mushaf-card {
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 6px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+html[data-theme="dark"] .dark-page-container {
+  background-color: #0c0d10;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+}
+html[data-theme="light"] .tajweed-mushaf-card {
+  background-color: #fbf8f0;
+  box-shadow: 0 4px 20px rgba(14, 105, 83, 0.10);
+}
+
+.mushaf-ornate-border {
+  border: 2.5px solid var(--teal-frame);
+  outline: 1.2px solid var(--gold-border);
+  outline-offset: -5px;
+  padding: 6px 9px 5px;
+  position: relative;
+  border-radius: 4px;
+}
+html[data-theme="dark"] .mushaf-ornate-border.dark-mushaf-border {
+  border-color: rgba(212, 175, 55, 0.42);
+  outline-color: rgba(255, 255, 255, 0.14);
+  background: #0c0d10;
+}
+
+/* Unified Quranic Text Body (KFGQPC Uthmanic Script HAFS) */
+.dark-mushaf-text,
+.tajweed-text-body {
+  font-family: var(--mushaf-font-family) !important;
+  font-size: var(--mushaf-font-size, 25px);
+  line-height: 2.02;
+  text-align: justify;
+  text-justify: inter-word;
+  padding: 2px 2px;
+  direction: rtl;
+  font-feature-settings: "kern" 1, "liga" 1, "mark" 1, "mkmk" 1;
+}
+html[data-theme="dark"] .dark-mushaf-text {
+  color: #f8fafc;
+}
+html[data-theme="light"] .tajweed-text-body {
+  color: #141414;
+}
+
+/* Authentic 15-Line Justified Madinah Mushaf Row */
+.mushaf-line {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  line-height: 1.98;
+  white-space: nowrap;
+}
+.mushaf-line.mushaf-line-centered {
+  justify-content: center;
+  gap: 0.28em;
+}
+.mushaf-line .w {
+  padding: 0 1px;
+}
+
+/* Disable Tajweed colors cleanly when user toggles cfg-tajweed-colors OFF */
+.tajweed-disabled .tj-lazim,
+.tajweed-disabled .tj-wajib,
+.tajweed-disabled .tj-jaiz,
+.tajweed-disabled .tj-tabeei,
+.tajweed-disabled .tj-ikhfa,
+.tajweed-disabled .tj-idgham,
+.tajweed-disabled .tj-tafkheem,
+.tajweed-disabled .tj-qalqalah {
+  color: inherit !important;
+  font-weight: inherit !important;
+}
+
+/* Ornate Surah Header Banner (Matching Reference Image: Arabesque Frame + Centered Title) */
+.mushaf-surah-banner {
+  position: relative;
+  width: 100%;
+  margin: 6px 0 4px;
+  height: calc(var(--mushaf-font-size, 25px) * 1.68);
+  min-height: 36px;
+  max-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.mushaf-surah-banner svg.surah-banner-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.mushaf-surah-banner-title {
+  position: relative;
+  z-index: 2;
+  font-family: var(--mushaf-font-family);
+  font-size: calc(var(--mushaf-font-size, 25px) * 0.88);
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 16px;
+  letter-spacing: 0;
+}
+html[data-theme="dark"] .mushaf-surah-banner-title {
+  color: #ffffff;
+}
+html[data-theme="light"] .mushaf-surah-banner-title {
+  color: #0e4f3f;
+}
+html[data-theme="dark"] .surah-banner-svg .sb-stroke { stroke: #e5e7eb; }
+html[data-theme="dark"] .surah-banner-svg .sb-fill { fill: #e5e7eb; }
+html[data-theme="dark"] .surah-banner-svg .sb-bg { fill: #0c0d10; }
+html[data-theme="light"] .surah-banner-svg .sb-stroke { stroke: #0e6953; }
+html[data-theme="light"] .surah-banner-svg .sb-fill { fill: #c29b48; }
+html[data-theme="light"] .surah-banner-svg .sb-bg { fill: #fbf8f0; }
+
+/* Centered Calligraphic Basmalah below Surah Banner */
+.mushaf-basmalah {
+  text-align: center;
+  font-family: var(--mushaf-font-family);
+  font-size: calc(var(--mushaf-font-size, 25px) * 0.94);
+  line-height: 1.75;
+  margin: 1px 0 4px;
+  user-select: none;
+}
+html[data-theme="dark"] .mushaf-basmalah {
+  color: #f3f4f6;
+}
+html[data-theme="light"] .mushaf-basmalah {
+  color: #141414;
+}
+
+/* Ornate Rosette Ayah Medallion (Matching Reference Image in Both Themes) */
+.ayah-num-dark,
+.ayah-num-light {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: calc(var(--mushaf-font-size, 25px) * 1.28);
+  height: calc(var(--mushaf-font-size, 25px) * 1.28);
+  margin: 0 0.08em;
+  vertical-align: middle;
+  font-family: 'Cairo', sans-serif;
+  font-size: calc(var(--mushaf-font-size, 25px) * 0.42);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+html[data-theme="dark"] .ayah-num-dark {
+  color: #f8fafc;
+}
+html[data-theme="dark"] .ayah-num-dark svg {
+  stroke: #d1d5db;
+  fill: none;
+  opacity: 0.92;
+}
+html[data-theme="light"] .ayah-num-light {
+  color: #141414;
+}
+html[data-theme="light"] .ayah-num-light svg {
+  stroke: #b5892e;
+  fill: rgba(194, 155, 72, 0.08);
+}
+
+/* Android Double-Back Exit Toast */
+#tasmee-exit-toast {
+  position: fixed;
+  bottom: calc(84px + var(--safe-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: rgba(20, 23, 30, 0.94);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  z-index: 99999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+#tasmee-exit-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+html[data-theme="light"] #tasmee-exit-toast {
+  background: rgba(14, 105, 83, 0.95);
+  color: #ffffff;
+  border-color: rgba(194, 155, 72, 0.55);
+}
 </style>
 </head>
 <body>
@@ -4435,6 +4673,71 @@ if (window.Tasmee) {
   };
 }
 
+// --- Android Back Button & Double-Back Exit Toast Controller ---
+let _tasmeeExitToastTimer = null;
+window.__tasmeeShowExitToast = function(msg) {
+  let el = document.getElementById('tasmee-exit-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tasmee-exit-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg || 'اضغط مرة أخرى للخروج';
+  el.classList.add('show');
+  clearTimeout(_tasmeeExitToastTimer);
+  _tasmeeExitToastTimer = setTimeout(() => el.classList.remove('show'), 1900);
+};
+
+window.__tasmeeHandleBack = function() {
+  try {
+    // 1. Close any open modal / overlay / drawer / speed-dial first
+    const isVis = id => {
+      const e = document.getElementById(id);
+      if (!e) return false;
+      return e.classList.contains('open') || e.classList.contains('show') || (e.style && e.style.display === 'flex') || (e.style && e.style.display === 'block');
+    };
+    if (isVis('app-dialog-overlay')) {
+      const noBtn = document.getElementById('app-dialog-cancel');
+      if (noBtn) noBtn.click();
+      return 'handled';
+    }
+    if (isVis('modal-word-action')) { if (typeof closeWordModal === 'function') closeWordModal(); return 'handled'; }
+    if (isVis('modal-reciters-download')) { if (typeof closeRecitersDownloadModal === 'function') closeRecitersDownloadModal(); return 'handled'; }
+    if (isVis('modal-settings')) { if (typeof closeSettings === 'function') closeSettings(); return 'handled'; }
+    if (isVis('modal-search')) { if (typeof closeSearch === 'function') closeSearch(); return 'handled'; }
+    if (isVis('modal-khatmah')) { if (typeof closeKhatmah === 'function') closeKhatmah(); return 'handled'; }
+    if (isVis('modal-mistakes')) { if (typeof closeMistakesBankModal === 'function') closeMistakesBankModal(); return 'handled'; }
+    if (isVis('drawer-index')) { if (typeof closeDrawer === 'function') closeDrawer(); return 'handled'; }
+    if (isVis('fab-speed-dial')) { if (typeof closeFabSpeedDial === 'function') closeFabSpeedDial(); return 'handled'; }
+
+    // 2. Exit dedicated Quiz / Tasmee session back to main screen
+    if (typeof isQuizModeActive !== 'undefined' && isQuizModeActive) {
+      if (typeof exitDedicatedQuizSession === 'function') exitDedicatedQuizSession();
+      else if (typeof exitMistakesQuizMode === 'function') exitMistakesQuizMode();
+      return 'handled';
+    }
+
+    // 3. Return from active Recitation / Audio playback to the Main Home View without losing data
+    if (typeof isReciting !== 'undefined' && isReciting) {
+      if (typeof stopRecitation === 'function') stopRecitation();
+      const hb = document.getElementById('halt-alert-bar');
+      if (hb) hb.style.display = 'none';
+      return 'handled';
+    }
+    if (typeof isAudioPlaying !== 'undefined' && isAudioPlaying) {
+      if (typeof stopSheikhAudio === 'function') stopSheikhAudio();
+      return 'handled';
+    }
+    const hbOpen = document.getElementById('halt-alert-bar');
+    if (hbOpen && hbOpen.style.display === 'flex') {
+      hbOpen.style.display = 'none';
+      return 'handled';
+    }
+  } catch (_) {}
+  // 4. Already on Main Screen -> let Flutter handle double-back-to-exit
+  return 'home';
+};
+
 // Complete 114 Surahs Metadata
 const ALL_SURAHS = [
   {s:1, n:"الفاتحة", e:"Al-Fatihah", t:"مكية", c:7, p:1, j:1},
@@ -5364,6 +5667,7 @@ async function fetchPageDataByNumber(pageNumber) {
         t: w.text_uthmani,
         s: sNum,
         a: v.verse_number,
+        ln: w.line_number || 0,
         end: i === ws.length - 1
       }));
     });
@@ -5511,11 +5815,159 @@ function getMushafPageMeta(pageNumber, pData, wordListOverride) {
 }
 
 function mushafAyahMedallionInner(aNum) {
-  return `<svg viewBox="0 0 36 36">
-    <polygon points="18,1.5 22.2,6.2 28.5,5.5 29.8,11.8 34.5,16 31.2,21.5 32.5,27.8 26.2,29.2 22,34.2 18,30.8 14,34.2 9.8,29.2 3.5,27.8 4.8,21.5 1.5,16 6.2,11.8 7.5,5.5 13.8,6.2" stroke-width="1.2" opacity="0.75"/>
-    <circle cx="18" cy="18" r="12.2"/>
-    <circle cx="18" cy="18" r="10.2" stroke-dasharray="1.8,1.8"/>
+  return `<svg viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M20 2 C22.5 5.2 25.5 3.6 27.6 5.7 C29.7 7.8 28.1 10.8 31.3 13.3 C34.5 15.8 38 17.5 38 20 C38 22.5 34.5 24.2 31.3 26.7 C28.1 29.2 29.7 32.2 27.6 34.3 C25.5 36.4 22.5 34.8 20 38 C17.5 34.8 14.5 36.4 12.4 34.3 C10.3 32.2 11.9 29.2 8.7 26.7 C5.5 24.2 2 22.5 2 20 C2 17.5 5.5 15.8 8.7 13.3 C11.9 10.8 10.3 7.8 12.4 5.7 C14.5 3.6 17.5 5.2 20 2 Z" stroke-width="1.35"/>
+    <circle cx="20" cy="20" r="12.5" stroke-width="1.15"/>
+    <circle cx="20" cy="20" r="10.4" stroke-width="0.85" stroke-dasharray="1.5,1.6" opacity="0.85"/>
   </svg><span>${toArabicNum(aNum)}</span>`;
+}
+
+// Ornate Surah Header Cartouche matching the reference Mushaf design (applied to all 114 Surahs)
+function buildSurahBannerHTML(surahNum) {
+  const sObj = ALL_SURAHS.find(x => x.s === surahNum);
+  const title = sObj ? ('سُورَةُ ' + sObj.n) : '';
+  const showBasmalah = surahNum !== 1 && surahNum !== 9;
+  const banner = `<div class="mushaf-surah-banner" data-surah="${surahNum}">
+    <svg class="surah-banner-svg" viewBox="0 0 600 68" preserveAspectRatio="none" aria-hidden="true">
+      <rect class="sb-bg sb-stroke" x="2" y="4" width="596" height="60" rx="5" stroke-width="2.2"/>
+      <rect class="sb-stroke" x="7" y="9" width="586" height="50" rx="3" fill="none" stroke-width="1.1" opacity="0.85"/>
+      <!-- Left & Right Arabesque Ornamental Medallions -->
+      <path class="sb-stroke" d="M14,34 C24,14 52,14 72,22 C88,28 104,16 128,16 L176,16 C188,16 196,24 204,34 C196,44 188,52 176,52 L128,52 C104,52 88,40 72,46 C52,54 24,54 14,34 Z" fill="none" stroke-width="1.4"/>
+      <path class="sb-stroke" d="M586,34 C576,14 548,14 528,22 C512,28 496,16 472,16 L424,16 C412,16 404,24 396,34 C404,44 412,52 424,52 L472,52 C496,52 512,40 528,46 C548,54 576,54 586,34 Z" fill="none" stroke-width="1.4"/>
+      <circle class="sb-stroke" cx="46" cy="34" r="11" fill="none" stroke-width="1.3"/>
+      <circle class="sb-fill" cx="46" cy="34" r="4" opacity="0.8"/>
+      <circle class="sb-stroke" cx="554" cy="34" r="11" fill="none" stroke-width="1.3"/>
+      <circle class="sb-fill" cx="554" cy="34" r="4" opacity="0.8"/>
+      <circle class="sb-fill" cx="96" cy="34" r="3" opacity="0.7"/>
+      <circle class="sb-fill" cx="504" cy="34" r="3" opacity="0.7"/>
+      <!-- Central Pointed Cartouche -->
+      <path class="sb-bg sb-stroke" d="M204,34 L224,12 L376,12 L396,34 L376,56 L224,56 Z" stroke-width="1.8"/>
+      <path class="sb-stroke" d="M212,34 L228,17 L372,17 L388,34 L372,51 L228,51 Z" fill="none" stroke-width="0.9" opacity="0.75"/>
+    </svg>
+    <span class="mushaf-surah-banner-title">${title}</span>
+  </div>`;
+  const basmalah = showBasmalah ? `<div class="mushaf-basmalah">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>` : '';
+  return banner + basmalah;
+}
+
+// Dynamic Hafs Tajweed Colorizer for ALL 604 pages (preserves every single Uthmani character & diacritic)
+const _tajweedCache = new Map();
+function colorizeUthmaniTajweed(wordText) {
+  if (!wordText) return '';
+  const cached = _tajweedCache.get(wordText);
+  if (cached !== undefined) return cached;
+  // Split into base letter + its combining marks (diacritics/harakat/madd/sukun)
+  const clusters = wordText.match(/[\u0621-\u064A\u0671\u0670\u06E5\u06E6][\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]*/g);
+  if (!clusters) {
+    _tajweedCache.set(wordText, wordText);
+    return wordText;
+  }
+  const hasMadd = c => c.includes('\u0653') || c.startsWith('\u0622');
+  const hasShadda = c => c.includes('\u0651');
+  const hasSukun = c => c.includes('\u0652') || c.includes('\u06E1');
+  const hasSilentZero = c => c.includes('\u06DF');
+  const hasIqlabMeem = c => c.includes('\u06E2');
+  const isHamza = c => /^[ءأإؤئ]/.test(c);
+  const isQalqalahLetter = c => /^[قطبجد]/.test(c);
+  const isGhunnahLetter = c => /^[نم]/.test(c);
+
+  let out = '';
+  let cursor = 0;
+  for (let i = 0; i < clusters.length; i++) {
+    const c = clusters[i];
+    const pos = wordText.indexOf(c, cursor);
+    if (pos > cursor) out += wordText.slice(cursor, pos);
+    cursor = pos + c.length;
+    const nxt = i + 1 < clusters.length ? clusters[i + 1] : '';
+    let cls = '';
+    if (hasMadd(c)) {
+      if (nxt && (hasShadda(nxt) || hasSukun(nxt))) cls = 'tj-lazim';
+      else if (nxt && isHamza(nxt)) cls = 'tj-wajib';
+      else if (i === clusters.length - 1 || (i === clusters.length - 2 && hasSilentZero(nxt))) cls = 'tj-jaiz';
+      else cls = 'tj-wajib';
+    } else if (hasSilentZero(c)) {
+      cls = 'tj-idgham';
+    } else if (hasIqlabMeem(c) || (isGhunnahLetter(c) && hasShadda(c))) {
+      cls = 'tj-ikhfa';
+    } else if (isQalqalahLetter(c) && hasSukun(c)) {
+      cls = 'tj-qalqalah';
+    }
+    out += cls ? `<span class="${cls}">${c}</span>` : c;
+  }
+  if (cursor < wordText.length) out += wordText.slice(cursor);
+  if (_tajweedCache.size > 4000) _tajweedCache.clear();
+  _tajweedCache.set(wordText, out);
+  return out;
+}
+
+// Build unified Mushaf body HTML (exact 15-line layout when line_number is present, with Surah banners, Basmalah, Tajweed, and Rosette medallions)
+function buildMushafWordsBodyHTML(words, options) {
+  const { interactive, isDark, meta } = options;
+  const badgeCls = isDark ? 'ayah-num-dark' : 'ayah-num-light';
+  const hasLineNums = words.length > 0 && words.some(w => w.ln && w.ln > 0);
+  const isShortOpeningPage = currentPage === 1 || currentPage === 2;
+
+  const renderWord = (w, j) => {
+    const wordHtml = w.h || colorizeUthmaniTajweed(w.t);
+    const sNum = w.s || (meta && meta.surahNumber) || 2;
+    let chunk = '';
+    if (interactive) {
+      const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
+      const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
+      const showPos = j === currentWordIndex && !showCur;
+      chunk += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${wordHtml}</span>`;
+      if (w.end) {
+        chunk += `<span class="${badgeCls}" data-ayah-s="${sNum}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${sNum}, ${w.a})">${mushafAyahMedallionInner(w.a)}</span>`;
+      }
+    } else {
+      chunk += `<span class="w">${wordHtml}</span>`;
+      if (w.end) {
+        chunk += `<span class="${badgeCls}">${mushafAyahMedallionInner(w.a)}</span>`;
+      }
+    }
+    return chunk;
+  };
+
+  let html = '';
+  let seenSurahStarts = new Set();
+  if (hasLineNums) {
+    let curLine = -1;
+    let lineBuf = [];
+    const flushLine = () => {
+      if (!lineBuf.length) return;
+      const centered = isShortOpeningPage || lineBuf.length <= 3;
+      html += `<div class="mushaf-line${centered ? ' mushaf-line-centered' : ''}">${lineBuf.join(' ')}</div>`;
+      lineBuf = [];
+    };
+    words.forEach((w, j) => {
+      const sNum = w.s || (meta && meta.surahNumber) || 2;
+      const isSurahStart = w.a === 1 && (j === 0 || (words[j - 1].s !== sNum || words[j - 1].a !== 1));
+      if (isSurahStart && !seenSurahStarts.has(sNum)) {
+        flushLine();
+        curLine = -1;
+        seenSurahStarts.add(sNum);
+        html += buildSurahBannerHTML(sNum);
+      }
+      const ln = w.ln || 0;
+      if (curLine !== -1 && ln !== curLine) {
+        flushLine();
+      }
+      curLine = ln;
+      lineBuf.push(renderWord(w, j));
+    });
+    flushLine();
+  } else {
+    words.forEach((w, j) => {
+      const sNum = w.s || (meta && meta.surahNumber) || 2;
+      const isSurahStart = w.a === 1 && (j === 0 || (words[j - 1].s !== sNum || words[j - 1].a !== 1));
+      if (isSurahStart && !seenSurahStarts.has(sNum)) {
+        seenSurahStarts.add(sNum);
+        html += buildSurahBannerHTML(sNum);
+      }
+      html += renderWord(w, j) + ' ';
+    });
+  }
+  return html;
 }
 
 function updateTopAndPageReadingIndicators() {
@@ -5549,12 +6001,7 @@ function buildStaticPeekPageHTML(pageNumber) {
   let html = light
     ? `<div class="tajweed-mushaf-card"><div class="mushaf-ornate-border">${headerHtml}<div class="tajweed-text-body">`
     : `<div class="dark-page-container"><div class="mushaf-ornate-border dark-mushaf-border">${headerHtml}<div class="dark-mushaf-text">`;
-  pData.words.forEach(w => {
-    html += `<span class="w">${light ? (w.h || w.t) : w.t}</span> `;
-    if (w.end) {
-      html += `<span class="${badgeCls}">${mushafAyahMedallionInner(w.a)}</span> `;
-    }
-  });
+  html += buildMushafWordsBodyHTML(pData.words, { interactive: false, isDark: !light, meta });
   const footerHtml = `<div class="page-number-footer"><span class="mushaf-page-num-badge">﴿ ${toArabicNum(pageNumber)} ﴾</span></div>`;
   html += `</div>${footerHtml}</div></div>`;
   return html;
@@ -5615,16 +6062,7 @@ function renderCurrentPage() {
           ${headerCartouchesHtml}
           <div class="dark-mushaf-text">`;
 
-    currentWordList.forEach((w, j) => {
-      const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
-      const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
-      const showPos = j === currentWordIndex && !showCur;
-      const sNum = w.s || meta.surahNumber || 2;
-      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${w.t}</span> `;
-      if (w.end) {
-        html += `<span class="ayah-num-dark" data-ayah-s="${sNum}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${sNum}, ${w.a})">${mushafAyahMedallionInner(w.a)}</span> `;
-      }
-    });
+    html += buildMushafWordsBodyHTML(currentWordList, { interactive: true, isDark: true, meta });
 
     html += `
           </div>
@@ -5652,17 +6090,7 @@ function renderCurrentPage() {
           <!-- Quranic Text with Authentic Tajweed Colors -->
           <div class="tajweed-text-body">`;
 
-    currentWordList.forEach((w, j) => {
-      const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
-      const wordHtml = w.h || w.t;
-      const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
-      const showPos = j === currentWordIndex && !showCur;
-      const sNum = w.s || meta.surahNumber || 3;
-      html += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${wordHtml}</span> `;
-      if (w.end) {
-        html += `<span class="ayah-num-light" data-ayah-s="${sNum}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${sNum}, ${w.a})">${mushafAyahMedallionInner(w.a)}</span> `;
-      }
-    });
+    html += buildMushafWordsBodyHTML(currentWordList, { interactive: true, isDark: false, meta });
 
     html += `
           </div>
@@ -6992,57 +7420,67 @@ function ayahStartOf(k) {
   return x;
 }
 
-// How far back a replay may go: current ayah + 2 previous ayahs + any ayah that holds a mistake.
+// How far back a replay may go: current ayah + 4 previous ayahs + any earlier read/mistaken ayah on the page.
 function replayFloor() {
   if (!currentWordList.length) return 0;
+  if (isQuizModeActive) return Math.max(0, quizStartWordIndex);
   const cur = Math.min(currentWordIndex, currentWordList.length - 1);
   let floor = ayahStartOf(cur);
-  for (let q = 0; q < 2 && floor > 0; q++) floor = ayahStartOf(floor - 1);
+  for (let q = 0; q < 4 && floor > 0; q++) floor = ayahStartOf(floor - 1);
   for (let k = 0; k < floor; k++) {
     if (wordStates[k] === 'wrong' || wordStates[k] === 'missed' || hasRedMark(currentPage, k)) { floor = ayahStartOf(k); break; }
   }
   return floor;
 }
 
-// Did the reader go back to repeat something he already read (to fix a mistake / to memorise)?
-// Returns the word index to continue from, or -1.  Needs TWO consecutive words as evidence.
+// Did the reader go back to re-read the start of the current ayah, a previous ayah, or earlier words to recall?
+// Returns the word index to smoothly rewind & resync to, or -1 (never weakens real mistake detection).
 function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
-  if (isQuizModeActive || !token) return -1;
+  if (!token) return -1;
   const cur = currentWordIndex, n = currentWordList.length;
-  if (cur <= 1) return -1;
+  if (cur <= 0) return -1;
   const live = k => k >= 0 && k < n && !isQuranPauseMark(currentWordList[k]?.t);
   const nextLive = k => { let x = k + 1; while (x < n && !live(x)) x++; return x; };
   const prevLive = k => { let x = k - 1; while (x >= 0 && !live(x)) x--; return x; };
   const floor = replayFloor();
-  const tokLen = normArabic(token).length;
+  const curAyahStart = ayahStartOf(Math.min(cur, n - 1));
+  const normTok = normArabic(token).replace(/\s+/g, '');
+  const tokLen = normTok.length;
 
-  for (let k = Math.min(cur - 2, n - 1); k >= floor; k--) {
-    if (!live(k) || !isStrictMatch(token, currentWordList[k].t)) continue;
+  // 1. Two-word confirmed replay anywhere in [floor .. cur - 1] (including short words like "لا ريب", "قل هو")
+  for (let k = Math.min(cur - 1, n - 1); k >= floor; k--) {
+    if (!live(k) || !isWordMatch(token, currentWordList[k].t)) continue;
     const nx = nextLive(k), pv = prevLive(k);
-    const fwd = !!(nextToken && nx < n && nx < cur && isStrictMatch(nextToken, currentWordList[nx].t));
-    const bwd = !!(prevToken && pv >= 0 && isStrictMatch(prevToken, currentWordList[pv].t));
-    if (!fwd && !bwd) continue;
-    const lenSum = tokLen + normArabic(fwd ? nextToken : prevToken).length;
-    if ((fwd && bwd) || lenSum >= 7) return k;
+    const fwd = !!(nextToken && nx < n && nx <= cur && isWordMatch(nextToken, currentWordList[nx].t));
+    const bwd = !!(prevToken && pv >= floor && isWordMatch(prevToken, currentWordList[pv].t));
+    if (fwd || bwd) return k;
   }
 
-  // Halted on a mistake: the reader takes a running start a few words before it.
-  if (haltError && tokLen >= 4) {
-    for (let k = cur - 1; k >= Math.max(floor, cur - 6); k--) {
+  // 2. Restarting from the FIRST word of the current ayah (most common recall habit during memorization!)
+  if (cur > curAyahStart && live(curAyahStart) && isWordMatch(token, currentWordList[curAyahStart].t)) {
+    return curAyahStart;
+  }
+
+  // 3. Running start from a recent word (last 8 words) in the current or previous ayah (whether halted or recalling)
+  if (tokLen >= 3 && !SHORT_PARTICLES.has(normTok)) {
+    const recentFloor = Math.max(floor, cur - 8);
+    for (let k = cur - 1; k >= recentFloor; k--) {
       if (!live(k)) continue;
-      if (!SHORT_PARTICLES.has(normArabic(currentWordList[k].t)) && isStrictMatch(token, currentWordList[k].t)) return k;
+      if (!SHORT_PARTICLES.has(normArabic(currentWordList[k].t)) && isWordMatch(token, currentWordList[k].t)) {
+        return k;
+      }
     }
   }
 
-  // One distinctive word that is the FIRST word of exactly one ayah in the allowed range.
-  if (allowSingle && tokLen >= 5 && !SHORT_PARTICLES.has(normArabic(token))) {
+  // 4. First word of any previous ayah in [floor .. cur - 1] (works even on single-word pause or restart)
+  if ((allowSingle || tokLen >= 3) && !SHORT_PARTICLES.has(normTok)) {
     const hits = [];
-    for (let k = floor; k <= cur - 2; k++) {
+    for (let k = floor; k < cur; k++) {
       if (!live(k)) continue;
-      if (k !== 0 && sameAyahIdx(k - 1, k)) continue;      // only ayah beginnings
-      if (isStrictMatch(token, currentWordList[k].t)) hits.push(k);
+      if (k !== 0 && sameAyahIdx(k - 1, k)) continue; // ayah beginnings
+      if (isWordMatch(token, currentWordList[k].t)) hits.push(k);
     }
-    if (hits.length === 1) return hits[0];
+    if (hits.length >= 1) return hits[hits.length - 1]; // prefer nearest previous ayah
   }
   return -1;
 }
