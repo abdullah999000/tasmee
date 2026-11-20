@@ -3149,16 +3149,24 @@ html[data-theme="light"] .app-dialog-box { background: #ffffff; color: #1b1b1b; 
    Unified across ALL 604 pages in BOTH Day Mode & Night Mode
    ========================================================================== */
 @font-face {
+  font-family: 'UthmanicHafs';
+  src: url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2') format('woff2'),
+       url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
   font-family: 'KFGQPC Uthmanic Script HAFS';
   src: url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.woff2') format('woff2'),
-       url('https://cdn.jsdelivr.net/gh/thetruetruth/quran-data-kfgqpc@main/hafs/font/hafs.18.woff2') format('woff2');
+       url('https://verses.quran.foundation/fonts/quran/hafs/uthmanic_hafs/UthmanicHafs1Ver18.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --mushaf-font-family: 'KFGQPC Uthmanic Script HAFS', 'Amiri Quran', 'Amiri', serif;
+  --mushaf-font-family: 'UthmanicHafs', 'KFGQPC Uthmanic Script HAFS', 'Amiri Quran', 'Amiri', serif;
 }
 
 /* Eye-comfort Tajweed palette in Night Mode (keeps same layout, switches colors only) */
@@ -5656,7 +5664,7 @@ async function fetchPageDataByNumber(pageNumber) {
   let pageData = getPageDataFromMemory(pageNumber, false);
   if (pageData) return pageData;
   try {
-    const res = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=text_uthmani,line_number&per_page=50`);
+    const res = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=text_uthmani,text_qpc_hafs,line_number&per_page=50`);
     const json = await res.json();
     const words = [];
     let sNum = 1;
@@ -5665,6 +5673,7 @@ async function fetchPageDataByNumber(pageNumber) {
       const ws = v.words.filter(w => w.char_type_name === 'word');
       ws.forEach((w, i) => words.push({
         t: w.text_uthmani,
+        q: w.text_qpc_hafs || w.text_uthmani,
         s: sNum,
         a: v.verse_number,
         ln: w.line_number || 0,
@@ -5908,7 +5917,7 @@ function buildMushafWordsBodyHTML(words, options) {
   const isShortOpeningPage = currentPage === 1 || currentPage === 2;
 
   const renderWord = (w, j) => {
-    const wordHtml = w.h || colorizeUthmaniTajweed(w.t);
+    const wordHtml = w.h || colorizeUthmaniTajweed(w.q || w.t);
     const sNum = w.s || (meta && meta.surahNumber) || 2;
     let chunk = '';
     if (interactive) {
@@ -7261,6 +7270,9 @@ function applySmartStart(r) {
   if (hb) hb.style.display = 'none';
   currentWordIndex = r.lastWord + 1;
   advancePastPauseMarks();
+  inExcursion = false;
+  primaryAnchorIdx = currentWordIndex;
+  primaryAnchorStates = wordStates.slice();
   const w = currentWordList[r.firstWord];
   if (w) {
     selectedAyahInfo = { surah: w.s || (currentPage === 62 ? 3 : 2), ayah: w.a };
@@ -7295,8 +7307,114 @@ function isStrictMatch(spoken, expected) {
 //  6. The error bell rings at most 3 times per word for the whole session.
 // ==========================================================================
 
-function clearReplayState() { resumeIdx = 0; resumeStates = null; }
-function checkReplayResume() { if (resumeStates && currentWordIndex >= resumeIdx) clearReplayState(); }
+let primaryAnchorIdx = 0;
+let primaryAnchorStates = null;
+let inExcursion = false;
+
+function clearReplayState() {
+  resumeIdx = 0;
+  resumeStates = null;
+  primaryAnchorIdx = 0;
+  primaryAnchorStates = null;
+  inExcursion = false;
+}
+function syncPrimaryAnchor() {
+  if (!inExcursion || currentWordIndex >= primaryAnchorIdx) {
+    inExcursion = false;
+    primaryAnchorIdx = Math.max(primaryAnchorIdx, currentWordIndex);
+    primaryAnchorStates = wordStates.slice();
+    if (resumeStates && currentWordIndex >= resumeIdx) {
+      resumeIdx = 0;
+      resumeStates = null;
+    }
+  }
+}
+function checkReplayResume() {
+  if (inExcursion && currentWordIndex >= primaryAnchorIdx) {
+    inExcursion = false;
+    primaryAnchorIdx = currentWordIndex;
+    primaryAnchorStates = wordStates.slice();
+  }
+  if (resumeStates && currentWordIndex >= resumeIdx) {
+    resumeIdx = 0;
+    resumeStates = null;
+  }
+}
+
+// Check if the reader is returning to their Primary Anchor (e.g., returned to Ayah 20 after reciting Ayah 10)
+function checkReturnToPrimaryAnchor(token, nextToken, prevToken) {
+  if (!inExcursion || !primaryAnchorStates || primaryAnchorIdx <= currentWordIndex) return -1;
+  const n = currentWordList.length;
+  if (primaryAnchorIdx >= n) return -1;
+  const live = k => k >= 0 && k < n && !isQuranPauseMark(currentWordList[k]?.t);
+  const nextLive = k => { let x = k + 1; while (x < n && !live(x)) x++; return x; };
+
+  // Candidate 1: Exact primaryAnchorIdx (the exact word where the reader paused before the excursion)
+  if (live(primaryAnchorIdx)) {
+    const exp = currentWordList[primaryAnchorIdx].t;
+    if (isWordMatch(token, exp) || (nextToken && isWordMatch(token + nextToken, exp))) {
+      return primaryAnchorIdx;
+    }
+  }
+  // Candidate 2: Start of the primaryAnchorIdx's ayah (e.g. returned to the start of Ayah 20)
+  const anchorAyahStart = ayahStartOf(primaryAnchorIdx);
+  if (anchorAyahStart > currentWordIndex && anchorAyahStart < primaryAnchorIdx && live(anchorAyahStart)) {
+    const expStart = currentWordList[anchorAyahStart].t;
+    if (isWordMatch(token, expStart) || (nextToken && isWordMatch(token + nextToken, expStart))) {
+      return anchorAyahStart;
+    }
+  }
+  // Candidate 3: One word before or after primaryAnchorIdx with 2-word confirmation
+  for (const cand of [primaryAnchorIdx - 1, primaryAnchorIdx + 1]) {
+    if (cand > currentWordIndex && cand < n && live(cand) && isWordMatch(token, currentWordList[cand].t)) {
+      const nx = nextLive(cand);
+      if (nextToken && nx < n && isWordMatch(nextToken, currentWordList[nx].t)) {
+        return cand;
+      }
+    }
+  }
+  return -1;
+}
+
+// Smoothly restore all previously read progress up to the Primary Anchor and continue seamlessly
+function restoreToPrimaryAnchor(retIdx) {
+  clearTimeout(interimMistakeTimer);
+  pendingMismatchFn = null;
+  pendingMismatchMeta = null;
+  if (primaryAnchorStates) {
+    for (let k = 0; k < retIdx && k < primaryAnchorStates.length; k++) {
+      if (primaryAnchorStates[k] === 'ok') wordStates[k] = 'ok';
+    }
+    for (let k = retIdx; k < primaryAnchorIdx && k < primaryAnchorStates.length; k++) {
+      if (wordStates[k] !== 'wrong') wordStates[k] = 'pending';
+    }
+  }
+  if (retIdx >= primaryAnchorIdx) {
+    inExcursion = false;
+    resumeIdx = 0;
+    resumeStates = null;
+  }
+  landOnWord(retIdx);
+  syncPrimaryAnchor();
+}
+
+// Check if 2+ consecutive spoken words match an ayah on an earlier page (returns matched token span count)
+function earlierPageExcursionSpan(tokens, gi) {
+  if (!tokens || gi + 1 >= tokens.length || currentPage <= 1 || isQuizModeActive) return 0;
+  const prevPage = typeof getPageDataFromMemory === 'function' ? getPageDataFromMemory(currentPage - 1, false) : null;
+  if (!prevPage || !prevPage.words || prevPage.words.length < 2) return 0;
+  const ws = prevPage.words;
+  for (let k = 0; k < ws.length - 1; k++) {
+    if (isStrictMatch(tokens[gi], ws[k].t) && isStrictMatch(tokens[gi + 1], ws[k + 1].t)) {
+      let span = 2;
+      while (gi + span < tokens.length && k + span < ws.length && isWordMatch(tokens[gi + span], ws[k + span].t)) {
+        span++;
+      }
+      return span;
+    }
+  }
+  return 0;
+}
 
 // "Fresh start" = the reader has not really begun yet on this page (so starting from the middle is fine).
 // Once 3 words were read correctly it is latched OFF for the page: a replay can never make the page "fresh" again.
@@ -7420,25 +7538,23 @@ function ayahStartOf(k) {
   return x;
 }
 
-// How far back a replay may go: current ayah + 4 previous ayahs + any earlier read/mistaken ayah on the page.
+// Allow temporary excursion/replay to ANY earlier ayah on the page (from word 0 up to primaryAnchorIdx).
 function replayFloor() {
   if (!currentWordList.length) return 0;
   if (isQuizModeActive) return Math.max(0, quizStartWordIndex);
-  const cur = Math.min(currentWordIndex, currentWordList.length - 1);
-  let floor = ayahStartOf(cur);
-  for (let q = 0; q < 4 && floor > 0; q++) floor = ayahStartOf(floor - 1);
-  for (let k = 0; k < floor; k++) {
-    if (wordStates[k] === 'wrong' || wordStates[k] === 'missed' || hasRedMark(currentPage, k)) { floor = ayahStartOf(k); break; }
-  }
-  return floor;
+  return 0;
 }
 
-// Did the reader go back to re-read the start of the current ayah, a previous ayah, or earlier words to recall?
-// Returns the word index to smoothly rewind & resync to, or -1 (never weakens real mistake detection).
+// Context-aware replay & temporary-excursion detector:
+// - Handles similar ayahs on the same page by scoring multi-word sequence evidence + proximity to current position
+//   (never jumps blindly to the top of the page when a closer/similar match exists!).
+// - Allows going back to ANY earlier ayah on the page (e.g. Ayah 10 while at Ayah 20) while preserving primaryAnchorIdx.
+// - Returns: index >= 0 (target to rewind/excursion to), -2 (ambiguous similar ayahs: wait 1 word), or -1 (no replay).
 function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
   if (!token) return -1;
   const cur = currentWordIndex, n = currentWordList.length;
-  if (cur <= 0) return -1;
+  const anchorRef = Math.max(cur, primaryAnchorIdx);
+  if (anchorRef <= 0) return -1;
   const live = k => k >= 0 && k < n && !isQuranPauseMark(currentWordList[k]?.t);
   const nextLive = k => { let x = k + 1; while (x < n && !live(x)) x++; return x; };
   const prevLive = k => { let x = k - 1; while (x >= 0 && !live(x)) x--; return x; };
@@ -7446,22 +7562,34 @@ function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
   const curAyahStart = ayahStartOf(Math.min(cur, n - 1));
   const normTok = normArabic(token).replace(/\s+/g, '');
   const tokLen = normTok.length;
+  const searchMax = Math.min(n - 1, Math.max(cur - 1, primaryAnchorIdx - 1));
 
-  // 1. Two-word confirmed replay anywhere in [floor .. cur - 1] (including short words like "لا ريب", "قل هو")
-  for (let k = Math.min(cur - 1, n - 1); k >= floor; k--) {
-    if (!live(k) || !isWordMatch(token, currentWordList[k].t)) continue;
+  // 1. Multi-word confirmed replay anywhere earlier on the page [floor .. searchMax]
+  //    Ranked by evidence strength first, then proximity to current/anchor position (solves similar ayahs!).
+  let bestMulti = -1, bestMultiScore = -1e9;
+  for (let k = searchMax; k >= floor; k--) {
+    if (k === cur || !live(k) || !isWordMatch(token, currentWordList[k].t)) continue;
     const nx = nextLive(k), pv = prevLive(k);
-    const fwd = !!(nextToken && nx < n && nx <= cur && isWordMatch(nextToken, currentWordList[nx].t));
+    const fwd = !!(nextToken && nx < n && isWordMatch(nextToken, currentWordList[nx].t));
     const bwd = !!(prevToken && pv >= floor && isWordMatch(prevToken, currentWordList[pv].t));
-    if (fwd || bwd) return k;
+    if (!fwd && !bwd) continue;
+    let score = (fwd ? 3.0 : 0) + (bwd ? 2.0 : 0);
+    if (k === curAyahStart) score += 1.0;
+    // Proximity tie-breaker: prefer the match closest to cur (never randomly jump to top of page!)
+    score -= Math.abs(cur - k) * 0.002;
+    if (score > bestMultiScore) {
+      bestMultiScore = score;
+      bestMulti = k;
+    }
   }
+  if (bestMulti >= 0) return bestMulti;
 
-  // 2. Restarting from the FIRST word of the current ayah (most common recall habit during memorization!)
+  // 2. Restarting from the FIRST word of the current ayah (most common recall habit!)
   if (cur > curAyahStart && live(curAyahStart) && isWordMatch(token, currentWordList[curAyahStart].t)) {
     return curAyahStart;
   }
 
-  // 3. Running start from a recent word (last 8 words) in the current or previous ayah (whether halted or recalling)
+  // 3. Running start from a recent word (last 8 words) in the current or previous ayah
   if (tokLen >= 3 && !SHORT_PARTICLES.has(normTok)) {
     const recentFloor = Math.max(floor, cur - 8);
     for (let k = cur - 1; k >= recentFloor; k--) {
@@ -7472,17 +7600,51 @@ function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
     }
   }
 
-  // 4. First word of any previous ayah in [floor .. cur - 1] (works even on single-word pause or restart)
-  if ((allowSingle || tokLen >= 3) && !SHORT_PARTICLES.has(normTok)) {
+  // 4. First word of any earlier ayah on the page [floor .. searchMax]
+  if (tokLen >= 3 && !SHORT_PARTICLES.has(normTok)) {
     const hits = [];
-    for (let k = floor; k < cur; k++) {
-      if (!live(k)) continue;
+    for (let k = floor; k <= searchMax; k++) {
+      if (k === cur || !live(k)) continue;
       if (k !== 0 && sameAyahIdx(k - 1, k)) continue; // ayah beginnings
       if (isWordMatch(token, currentWordList[k].t)) hits.push(k);
     }
-    if (hits.length >= 1) return hits[hits.length - 1]; // prefer nearest previous ayah
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) {
+      // Multiple similar ayahs start with this word: wait for next word if still streaming,
+      // or pick the one closest to cur if finalized!
+      if (!allowSingle) return -2;
+      hits.sort((a, b) => Math.abs(cur - a) - Math.abs(cur - b));
+      return hits[0];
+    }
   }
   return -1;
+}
+
+// Detect deliberate temporary excursion to a DIFFERENT ayah on the page (2+ consecutive words starting at a different ayah)
+function detectDifferentAyahExcursion(token, nextToken) {
+  if (isQuizModeActive || !token || !nextToken) return -1;
+  const cur = currentWordIndex, n = currentWordList.length;
+  const curAyah = currentWordList[cur]?.a;
+  const curSurah = currentWordList[cur]?.s;
+  const live = k => k >= 0 && k < n && !isQuranPauseMark(currentWordList[k]?.t);
+  const nextLive = k => { let x = k + 1; while (x < n && !live(x)) x++; return x; };
+  let best = -1, bestDist = 1e9;
+  for (let k = 0; k < n; k++) {
+    if (!live(k)) continue;
+    const w = currentWordList[k];
+    // Must be a DIFFERENT ayah (so a 1-word omission inside the current ayah is NEVER treated as an excursion!)
+    if (w.a === curAyah && w.s === curSurah) continue;
+    // Must be at the beginning of that ayah (first 2 words) to avoid accidental mid-ayah phrase jumps
+    const aStart = ayahStartOf(k);
+    if (k - aStart > 1) continue;
+    if (!isStrictMatch(token, w.t)) continue;
+    const nx = nextLive(k);
+    if (nx < n && isStrictMatch(nextToken, currentWordList[nx].t)) {
+      const d = Math.abs(k - cur);
+      if (d < bestDist) { bestDist = d; best = k; }
+    }
+  }
+  return best;
 }
 
 // Reader skipped words / started in the middle of the page.  Returns the index, -1 (no jump) or -2 (wait for one more word).
@@ -7566,11 +7728,25 @@ function doJump(idx) {
 // We remember where he was, so coming back to that place later is NOT counted as skipping words.
 function applyRewindToIndex(rewindIdx) {
   clearTimeout(interimMistakeTimer);
+  pendingMismatchFn = null;
+  pendingMismatchMeta = null;
   initialGrace = 0; haltAheadHits = 0;
-  if (!resumeStates) { resumeStates = wordStates.slice(); resumeIdx = currentWordIndex; }
-  else if (currentWordIndex > resumeIdx) resumeIdx = currentWordIndex;
+  // Preserve the Primary Anchor before entering a Temporary Excursion so returning later is 100% seamless
+  if (!inExcursion) {
+    primaryAnchorIdx = Math.max(primaryAnchorIdx, currentWordIndex);
+    primaryAnchorStates = wordStates.slice();
+    if (rewindIdx < primaryAnchorIdx) inExcursion = true;
+  } else if (currentWordIndex > primaryAnchorIdx) {
+    primaryAnchorIdx = currentWordIndex;
+    primaryAnchorStates = wordStates.slice();
+  }
+  if (!resumeStates) { resumeStates = wordStates.slice(); resumeIdx = primaryAnchorIdx; }
+  else if (primaryAnchorIdx > resumeIdx) resumeIdx = primaryAnchorIdx;
+  // Only mark words in the re-read segment pending visually while keeping primaryAnchorStates safely snapshotted
   const upTo = Math.min(currentWordList.length - 1, Math.max(currentWordIndex, rewindIdx));
-  for (let m = rewindIdx; m <= upTo; m++) wordStates[m] = 'pending';
+  for (let m = rewindIdx; m <= upTo; m++) {
+    if (wordStates[m] !== 'wrong') wordStates[m] = 'pending';
+  }
   landOnWord(rewindIdx);
 }
 
@@ -7891,6 +8067,7 @@ function processRecitedText(text, isFinal) {
       if (compoundWithNext) i++;
       if (compoundWithNext2) i += 2;
       lastProcessedTokenCount = startIdx + i + 1;
+      syncPrimaryAnchor();
       checkReplayResume();
 
       if (isQuizModeActive && currentWordIndex > quizTargetEndWordIndex) { setTimeout(() => nextQuizRound(), 400); return; }
@@ -7905,11 +8082,39 @@ function processRecitedText(text, isFinal) {
       continue;
     }
 
-    // ---- 2. the reader went back to repeat an ayah / a few words (replay) ----
-    const rp = detectReplayTarget(prevToken, token, nextToken, false);
+    // ---- 2a. returning to the Primary Anchor after a temporary excursion (e.g. Ayah 10 -> back to Ayah 20) ----
+    const retAnchor = checkReturnToPrimaryAnchor(token, nextToken, prevToken);
+    if (retAnchor >= 0) {
+      lastProcessedTokenCount = gi + 1;
+      restoreToPrimaryAnchor(retAnchor);
+      continue;
+    }
+
+    // ---- 2b. the reader went back to repeat an ayah / a few words (context-aware replay) ----
+    const rp = detectReplayTarget(prevToken, token, nextToken, isFinal);
     if (rp >= 0) {
       lastProcessedTokenCount = gi + 1;
       applyRewindToIndex(rp);
+      continue;
+    }
+    if (rp === -2) {
+      // Ambiguous start word matching multiple similar ayahs on the page: wait for next word to disambiguate!
+      scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, true);
+      break;
+    }
+
+    // ---- 2c. temporary excursion to a different ayah on the page OR an ayah on the previous page ----
+    const diffAyahIdx = detectDifferentAyahExcursion(token, nextToken);
+    if (diffAyahIdx >= 0) {
+      lastProcessedTokenCount = gi + 1;
+      applyRewindToIndex(diffAyahIdx);
+      continue;
+    }
+    const offPageSpan = earlierPageExcursionSpan(tokens, gi);
+    if (offPageSpan >= 2) {
+      i += offPageSpan - 1;
+      lastProcessedTokenCount = gi + offPageSpan;
+      smartStatus('📖 تلاوة من موضع سابق — عند عودتك للآية الحالية سيكمل التسميع تلقائياً');
       continue;
     }
 
