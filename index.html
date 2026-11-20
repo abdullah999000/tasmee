@@ -3237,6 +3237,14 @@ html[data-theme="light"] .tajweed-text-body {
   color: #141414;
 }
 
+/* Official Calligraphic Surah Names Font (Quran Foundation CDN) */
+@font-face {
+  font-family: 'surahnames';
+  src: url('https://verses.quran.foundation/fonts/quran/surah-names/v1/sura_names.woff2') format('woff2'),
+       url('https://verses.quran.foundation/fonts/quran/surah-names/v1/sura_names.ttf') format('truetype');
+  font-display: swap;
+}
+
 /* Authentic 15-Line Justified Madinah Mushaf Row */
 .mushaf-line {
   display: flex;
@@ -3244,15 +3252,98 @@ html[data-theme="light"] .tajweed-text-body {
   justify-content: space-between;
   align-items: baseline;
   width: 100%;
-  line-height: 1.98;
+  line-height: 1.92;
   white-space: nowrap;
 }
 .mushaf-line.mushaf-line-centered {
   justify-content: center;
-  gap: 0.28em;
+  gap: 0.22em;
 }
 .mushaf-line .w {
   padding: 0 1px;
+}
+
+/* QCF V4 Tajweed & QCF V2 Pixel-Perfect Vector Glyph Word Styling */
+.w.qcf-word {
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  font-variant-ligatures: normal;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* Big Text Layout Mode (when user enlarges font size >= 32px in Settings):
+   relax strict single-line clamping so large glyphs wrap cleanly without clipping */
+.mushaf-big-text .mushaf-line {
+  flex-wrap: wrap !important;
+  white-space: normal !important;
+  justify-content: center !important;
+  gap: 0.08em 0.22em;
+  line-height: 2.08;
+}
+
+/* Calligraphic Surah Name Glyph inside Banner when surahnames font is ready */
+.mushaf-surah-banner-title.surah-glyph-ready {
+  font-family: 'surahnames', var(--mushaf-font-family);
+  font-size: calc(var(--mushaf-font-size, 26px) * 1.18);
+  font-weight: 400;
+}
+
+/* Font Size Preset Chips & +/- Controls in Settings */
+.font-size-ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.font-step-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--accent-green);
+  font-family: 'Cairo', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.font-step-btn:active { transform: scale(0.92); }
+.font-presets-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.font-preset-chip {
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: 1px solid #374151;
+  background: #1c1e24;
+  color: #e5e7eb;
+  font-family: 'Cairo', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+.font-preset-chip.active {
+  border-color: var(--accent-green);
+  background: rgba(52, 211, 153, 0.18);
+  color: var(--accent-green);
+}
+html[data-theme="light"] .font-preset-chip {
+  background: #f3efe4;
+  color: #1f2937;
+  border-color: #d6cbb5;
+}
+html[data-theme="light"] .font-preset-chip.active {
+  background: rgba(14, 105, 83, 0.14);
+  border-color: #0e6953;
+  color: #0e6953;
 }
 
 /* Disable Tajweed colors cleanly when user toggles cfg-tajweed-colors OFF */
@@ -3768,17 +3859,28 @@ html[data-theme="light"] #tasmee-exit-toast {
         </div>
       </div>
       <div class="settings-sub-panel" id="sub-mushaf-layout">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span>حجم الخط القرآني العثماني:</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span>حجم عرض صفحات المصحف والخط:</span>
+          <strong id="font-size-live-badge" style="color:var(--accent-green);font-size:13px;">28px</strong>
         </div>
-        <input type="range" id="font-slider" min="20" max="40" value="26" style="width:100%;accent-color:var(--accent-green);" oninput="adjustFontSize(this.value, true)">
+        <div class="font-size-ctrl-row">
+          <button type="button" class="font-step-btn" onclick="stepFontSize(-2)" title="تصغير الخط">−</button>
+          <input type="range" id="font-slider" min="20" max="46" value="28" style="flex:1;accent-color:var(--accent-green);" oninput="adjustFontSize(this.value, true)">
+          <button type="button" class="font-step-btn" onclick="stepFontSize(2)" title="تكبير الخط">+</button>
+        </div>
+        <div class="font-presets-row">
+          <button type="button" class="font-preset-chip" data-size="22" onclick="adjustFontSize(22, true)">صغير</button>
+          <button type="button" class="font-preset-chip" data-size="28" onclick="adjustFontSize(28, true)">متوسط</button>
+          <button type="button" class="font-preset-chip" data-size="34" onclick="adjustFontSize(34, true)">كبير</button>
+          <button type="button" class="font-preset-chip" data-size="40" onclick="adjustFontSize(40, true)">كبير جداً</button>
+        </div>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;cursor:pointer;">
           <span>📐 ملء الشاشة بالصفحة تلقائياً (يناسب الهاتف والحاسوب)</span>
           <input type="checkbox" id="cfg-autofit" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="setAutoFit(this.checked)">
         </label>
         <button onclick="toggleDeviceFullscreen()" style="width:100%;margin-top:10px;padding:8px;border-radius:8px;background:rgba(52,211,153,0.18);border:1px solid var(--accent-green);color:var(--accent-green);font-family:inherit;font-weight:700;cursor:pointer;">⛶ وضع الشاشة الكاملة</button>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;cursor:pointer;">
-          <span>🎨 تفعيل ألوان أحكام التجويد (في الوضع النهاري)</span>
+          <span>🎨 تفعيل ألوان مصحف التجويد (في الوضعين النهاري والليلي)</span>
           <input type="checkbox" id="cfg-tajweed-colors" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="toggleTajweed(this.checked)">
         </label>
       </div>
@@ -5575,36 +5677,57 @@ function openSettings() {
   document.getElementById('modal-settings').classList.add('open');
 }
 
-// Apply Theme
+let tajweedEnabled = true;
+try { tajweedEnabled = localStorage.getItem('tasmee_tajweed') !== '0'; } catch (_) {}
+
+// Apply Theme (preserves exact current page & updates QCF V4 Tajweed font-palette cleanly)
 function setAppTheme(theme) {
-  currentTheme = theme;
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('tasmee_theme', theme);
-  // Switch to the respective reference page if on default page
-  if (theme === 'dark' && currentPage === 62) {
-    loadMushafPage(25);
-  } else if (theme === 'light' && currentPage === 25) {
-    loadMushafPage(62);
-  } else {
-    renderCurrentPage();
-  }
+  currentTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  try { localStorage.setItem('tasmee_theme', currentTheme); } catch (_) {}
+  const lbl = document.getElementById('lbl-theme-current');
+  if (lbl) lbl.textContent = currentTheme === 'light' ? '☀️ المصحف النهاري المجود' : '🌙 الوضع الليلي الداكن';
+  renderCurrentPage();
   closeSettings();
 }
 
-// Adjust Font Size
+// Adjust Font / Mushaf Page Size with full localStorage persistence & Big-Text responsive mode
 function adjustFontSize(val, fromUser) {
+  const num = Math.max(20, Math.min(46, Math.round(Number(val) || 28)));
   if (fromUser && autoFitPage) setAutoFit(false);
-  document.documentElement.style.setProperty('--mushaf-font-size', val + 'px');
-  document.getElementById('font-size-val').textContent = val + 'px';
-  localStorage.setItem('tasmee_font_size', val);
+  document.documentElement.style.setProperty('--mushaf-font-size', num + 'px');
+  const lbl = document.getElementById('font-size-val');
+  if (lbl) lbl.textContent = num + 'px';
+  const badge = document.getElementById('font-size-live-badge');
+  if (badge) badge.textContent = num + 'px';
+  const slider = document.getElementById('font-slider');
+  if (slider) slider.value = String(num);
+  document.querySelectorAll('.font-preset-chip').forEach(btn => {
+    btn.classList.toggle('active', Number(btn.dataset.size) === num);
+  });
+  const area = document.getElementById('mushaf-content-area');
+  if (area) area.classList.toggle('mushaf-big-text', !autoFitPage && num >= 32);
+  try { localStorage.setItem('tasmee_font_size', String(num)); } catch (_) {}
 }
 
-// Toggle Tajweed Colors
+function stepFontSize(delta) {
+  const slider = document.getElementById('font-slider');
+  const cur = slider ? Number(slider.value) : (Number(localStorage.getItem('tasmee_font_size')) || 28);
+  adjustFontSize(cur + delta, true);
+}
+
+// Toggle Tajweed Colors (persists setting & switches seamlessly between QCF V4 Tajweed and QCF V2 Madani)
 function toggleTajweed(enabled) {
+  tajweedEnabled = !!enabled;
+  try { localStorage.setItem('tasmee_tajweed', tajweedEnabled ? '1' : '0'); } catch (_) {}
+  const cb = document.getElementById('cfg-tajweed-colors');
+  if (cb) cb.checked = tajweedEnabled;
   const container = document.getElementById('mushaf-content-area');
   if (container) {
-    container.classList.toggle('tajweed-disabled', !enabled);
+    container.classList.toggle('tajweed-disabled', !tajweedEnabled);
   }
+  ensureQcfFontForPage(currentPage);
+  renderCurrentPage();
 }
 
 // Load Mushaf Page
@@ -5659,41 +5782,152 @@ function getPageDataFromMemory(pageNumber, allowPartialOfflineFallback) {
   return null;
 }
 
+// ==========================================================================
+// QCF V4 TAJWEED & QCF V2 PER-PAGE VECTOR FONT ENGINE (Official Quran Foundation CDN)
+// Renders exact King Fahd Complex Madinah Tajweed Mushaf glyphs across ALL 604 pages
+// with instant Unicode fallback offline and native COLRv1 Light/Dark font-palette support.
+// ==========================================================================
+const QCF_CDN_BASE = 'https://verses.quran.foundation/fonts/quran/hafs';
+const loadedQcfFonts = new Set();
+const loadingQcfFonts = new Map();
+const injectedPalettes = new Set();
+
+function injectQcfPaletteCSS(fontName) {
+  if (injectedPalettes.has(fontName) || typeof document === 'undefined' || !document.head) return;
+  injectedPalettes.add(fontName);
+  const st = document.createElement('style');
+  st.textContent = `
+    @font-palette-values --Light-${fontName} { font-family: '${fontName}'; base-palette: 0; }
+    @font-palette-values --Dark-${fontName} { font-family: '${fontName}'; base-palette: 1; }
+  `;
+  document.head.appendChild(st);
+}
+
+function getActiveQcfFontName(pageNumber) {
+  return tajweedEnabled ? `p${pageNumber}-v4` : `p${pageNumber}-v2`;
+}
+
+function isQcfFontReady(pageNumber) {
+  return loadedQcfFonts.has(getActiveQcfFontName(pageNumber));
+}
+
+async function ensureQcfFontForPage(pageNumber, silentPreload) {
+  if (!pageNumber || pageNumber < 1 || pageNumber > 604) return false;
+  if (typeof FontFace === 'undefined' || typeof document === 'undefined' || !document.fonts) return false;
+  const ver = tajweedEnabled ? 'v4' : 'v2';
+  const fontName = `p${pageNumber}-${ver}`;
+  if (loadedQcfFonts.has(fontName)) return true;
+  if (loadingQcfFonts.has(fontName)) return loadingQcfFonts.get(fontName);
+
+  const isFx = typeof navigator !== 'undefined' && /Firefox/i.test(navigator.userAgent || '');
+  const url = ver === 'v4'
+    ? (isFx && currentTheme === 'dark'
+        ? `${QCF_CDN_BASE}/v4/ot-svg/dark/woff2/p${pageNumber}.woff2`
+        : `${QCF_CDN_BASE}/v4/colrv1/woff2/p${pageNumber}.woff2`)
+    : `${QCF_CDN_BASE}/v2/woff2/p${pageNumber}.woff2`;
+
+  const prom = (async () => {
+    try {
+      const ff = new FontFace(fontName, `url('${url}') format('woff2')`);
+      ff.display = 'swap';
+      await ff.load();
+      document.fonts.add(ff);
+      loadedQcfFonts.add(fontName);
+      if (ver === 'v4') injectQcfPaletteCSS(fontName);
+      if (!silentPreload && pageNumber === currentPage) {
+        renderCurrentPage();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      loadingQcfFonts.delete(fontName);
+    }
+  })();
+  loadingQcfFonts.set(fontName, prom);
+  return prom;
+}
+
+function getCachedQcfPage(pageNumber) {
+  try {
+    const raw = localStorage.getItem('qpg_qcf_v4_' + pageNumber);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && p.qcf && Array.isArray(p.words) && p.words.length > 0) return p;
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function fetchQcfPageFromAPI(pageNumber) {
+  const res = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=code_v2,text_uthmani,text_qpc_hafs,line_number&mushaf=19&per_page=50`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  const words = [];
+  let sNum = 1;
+  (json.verses || []).forEach(v => {
+    sNum = +v.verse_key.split(':')[0];
+    const ws = (v.words || []).filter(w => w.char_type_name === 'word');
+    ws.forEach((w, i) => words.push({
+      t: w.text_uthmani,
+      q: w.text_qpc_hafs || w.text_uthmani,
+      c2: w.code_v2 || '',
+      s: sNum,
+      a: v.verse_number,
+      ln: w.line_number || 0,
+      end: i === ws.length - 1
+    }));
+  });
+  if (!words.length) throw new Error('Empty QCF page');
+  const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
+  const juzNum = getJuzByPage(pageNumber);
+  const pageData = {
+    qcf: true,
+    surahNumber: sNum,
+    surahName: "سورة " + surahObj.n,
+    pageNumber: pageNumber,
+    juzNumber: juzNum,
+    hizbNumber: Math.ceil(juzNum * 2 - 1),
+    words: words
+  };
+  try { localStorage.setItem('qpg_qcf_v4_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
+  try { localStorage.setItem('qpg_full_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
+  return pageData;
+}
+
 async function fetchPageDataByNumber(pageNumber) {
   if (!FULL_QURAN_CACHE) { try { await loadFullQuranFromStorage(); } catch (_) {} }
-  let pageData = getPageDataFromMemory(pageNumber, false);
-  if (pageData) return pageData;
+  // 1. Prefer cached QCF V4 page (has code_v2 + exact 15-line line_number)
+  const qcfCached = getCachedQcfPage(pageNumber);
+  if (qcfCached) {
+    ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
+    return qcfCached;
+  }
+  // 2. If we have an instant local/precached page, return it immediately and upgrade to QCF V4 seamlessly in background
+  let memData = getPageDataFromMemory(pageNumber, false);
+  if (memData) {
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+      fetchQcfPageFromAPI(pageNumber).then(upgraded => {
+        ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
+        if (pageNumber === currentPage && upgraded && upgraded.words.length === currentWordList.length) {
+          // Upgrade visual glyphs & line_number in-place without disturbing recitation pointer or wordStates!
+          for (let k = 0; k < currentWordList.length; k++) {
+            currentWordList[k].c2 = upgraded.words[k].c2;
+            currentWordList[k].q = upgraded.words[k].q;
+            currentWordList[k].ln = upgraded.words[k].ln;
+          }
+          renderCurrentPage();
+        }
+      }).catch(() => {});
+    }
+    return memData;
+  }
+  // 3. Fetch full QCF V4 page directly from API
   try {
-    const res = await fetch(`https://api.quran.com/api/v4/verses/by_page/${pageNumber}?words=true&word_fields=text_uthmani,text_qpc_hafs,line_number&per_page=50`);
-    const json = await res.json();
-    const words = [];
-    let sNum = 1;
-    json.verses.forEach(v => {
-      sNum = +v.verse_key.split(':')[0];
-      const ws = v.words.filter(w => w.char_type_name === 'word');
-      ws.forEach((w, i) => words.push({
-        t: w.text_uthmani,
-        q: w.text_qpc_hafs || w.text_uthmani,
-        s: sNum,
-        a: v.verse_number,
-        ln: w.line_number || 0,
-        end: i === ws.length - 1
-      }));
-    });
-    const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
-    const juzNum = getJuzByPage(pageNumber);
-    pageData = {
-      surahNumber: sNum,
-      surahName: "سورة " + surahObj.n,
-      pageNumber: pageNumber,
-      juzNumber: juzNum,
-      hizbNumber: Math.ceil(juzNum * 2 - 1),
-      words: words
-    };
-    try { localStorage.setItem('qpg_full_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
-    return pageData;
+    const fetched = await fetchQcfPageFromAPI(pageNumber);
+    ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
+    return fetched;
   } catch (_) {
-    // Offline fallback if network fetch failed
     return getPageDataFromMemory(pageNumber, true);
   }
 }
@@ -5916,20 +6150,31 @@ function buildMushafWordsBodyHTML(words, options) {
   const hasLineNums = words.length > 0 && words.some(w => w.ln && w.ln > 0);
   const isShortOpeningPage = currentPage === 1 || currentPage === 2;
 
+  const pageNumForFont = (options && options.pageNumber) || currentPage;
+  const qcfReady = isQcfFontReady(pageNumForFont);
+  const qcfFontName = getActiveQcfFontName(pageNumForFont);
+  const qcfPalette = tajweedEnabled
+    ? `font-palette:${isDark ? '--Dark-' : '--Light-'}${qcfFontName};`
+    : '';
+
   const renderWord = (w, j) => {
-    const wordHtml = w.h || colorizeUthmaniTajweed(w.q || w.t);
+    const useQcf = qcfReady && !!(w.c2);
+    const wordHtml = useQcf ? w.c2 : (w.h || colorizeUthmaniTajweed(w.q || w.t));
+    const qcfCls = useQcf ? ' qcf-word' : '';
+    const qcfStyle = useQcf ? `font-family:'${qcfFontName}',var(--mushaf-font-family);${qcfPalette}` : '';
     const sNum = w.s || (meta && meta.surahNumber) || 2;
     let chunk = '';
     if (interactive) {
       const isHidden = isHidingWords && wordStates[j] === 'pending' && j > currentWordIndex;
       const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
       const showPos = j === currentWordIndex && !showCur;
-      chunk += `<span class="w ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}" style="${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}">${wordHtml}</span>`;
+      const styleAttr = `${qcfStyle}${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}`;
+      chunk += `<span class="w${qcfCls} ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}"${styleAttr ? ` style="${styleAttr}"` : ''}>${wordHtml}</span>`;
       if (w.end) {
         chunk += `<span class="${badgeCls}" data-ayah-s="${sNum}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${sNum}, ${w.a})">${mushafAyahMedallionInner(w.a)}</span>`;
       }
     } else {
-      chunk += `<span class="w">${wordHtml}</span>`;
+      chunk += `<span class="w${qcfCls}"${qcfStyle ? ` style="${qcfStyle}"` : ''}>${wordHtml}</span>`;
       if (w.end) {
         chunk += `<span class="${badgeCls}">${mushafAyahMedallionInner(w.a)}</span>`;
       }
@@ -6010,7 +6255,7 @@ function buildStaticPeekPageHTML(pageNumber) {
   let html = light
     ? `<div class="tajweed-mushaf-card"><div class="mushaf-ornate-border">${headerHtml}<div class="tajweed-text-body">`
     : `<div class="dark-page-container"><div class="mushaf-ornate-border dark-mushaf-border">${headerHtml}<div class="dark-mushaf-text">`;
-  html += buildMushafWordsBodyHTML(pData.words, { interactive: false, isDark: !light, meta });
+  html += buildMushafWordsBodyHTML(pData.words, { interactive: false, isDark: !light, meta, pageNumber });
   const footerHtml = `<div class="page-number-footer"><span class="mushaf-page-num-badge">﴿ ${toArabicNum(pageNumber)} ﴾</span></div>`;
   html += `</div>${footerHtml}</div></div>`;
   return html;
@@ -6251,11 +6496,12 @@ function fitPageToScreen(force) {
   const avail = vp.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 4;
   const root = document.documentElement;
   root.classList.add('fitting');
-  let lo = 12, hi = 400, best = 12;
+  const availW = vp.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0) + 2;
+  let lo = 14, hi = 120, best = 14;
   for (let i = 0; i < 16; i++) {
     const mid = (lo + hi) / 2;
     root.style.setProperty('--mushaf-font-size', mid + 'px');
-    if (stage.offsetHeight <= avail) { best = mid; lo = mid; } else { hi = mid; }
+    if (stage.offsetHeight <= avail && stage.scrollWidth <= availW) { best = mid; lo = mid; } else { hi = mid; }
   }
   root.style.setProperty('--mushaf-font-size', best + 'px');
   root.classList.remove('fitting');
