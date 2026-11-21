@@ -22,12 +22,62 @@ if [ -x "$SDKMGR" ]; then
   yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
 fi
 
-# Bundle quantized multilingual/Arabic Whisper GGML model (~59.7 MB) for 100% offline recitation
+# Bundle on-device Quran-tuned Whisper Base GGML model (~55-60 MB) with verified fallback to standard ggml-base-q5_1.bin
 MODEL_FILE="assets/models/ggml-base-q5_1.bin"
 if [ ! -s "$MODEL_FILE" ]; then
-  echo "Downloading on-device Whisper Base Q5_1 model (~59.7 MB) to bundle inside APK..."
-  curl -fL --retry 3 -o "$MODEL_FILE" \
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin"
+  echo "Resolving Quran-tuned Whisper Base GGML model from Hugging Face..."
+  python3 - <<'PYDL'
+import json, urllib.request, os, sys
+
+out_path = "assets/models/ggml-base-q5_1.bin"
+repos = [
+    "bilelmoussaoui/whisper-base-quran-ggml",
+    "androidapps11/whisper-base-ar-quran-ggml",
+]
+candidate_urls = []
+for repo in repos:
+    try:
+        req = urllib.request.Request(f"https://huggingface.co/api/models/{repo}", headers={"User-Agent": "tasmee-builder"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            meta = json.loads(r.read().decode("utf-8"))
+        bins = [s["rfilename"] for s in meta.get("siblings", []) if s.get("rfilename", "").endswith(".bin")]
+        # Prefer q5_1 / q5_0 quantized models (~55-60 MB) over huge f16 models
+        bins.sort(key=lambda n: (0 if ("q5_1" in n or "q5_0" in n) else 1, len(n)))
+        for b in bins:
+            candidate_urls.append(f"https://huggingface.co/{repo}/resolve/main/{b}")
+    except Exception as e:
+        print(f"Note: could not query {repo}: {e}")
+
+candidate_urls.append("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin")
+
+for url in candidate_urls:
+    tmp = out_path + ".dl"
+    try:
+        print(f"Downloading model from: {url}")
+        req = urllib.request.Request(url, headers={"User-Agent": "tasmee-builder"})
+        with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
+            while True:
+                chunk = resp.read(1024 * 256)
+                if not chunk:
+                    break
+                f.write(chunk)
+        sz = os.path.getsize(tmp)
+        with open(tmp, "rb") as f:
+            magic = f.read(4)
+        # Valid GGML magic is 0x67676d6c ('lmgg' little-endian or 'ggml') and size > 20 MB
+        if sz > 20 * 1024 * 1024 and magic in (b"lmgg", b"ggml"):
+            os.replace(tmp, out_path)
+            print(f"Verified GGML model ({sz:,} bytes) from {url}")
+            sys.exit(0)
+        else:
+            print(f"Skipping invalid model file (size={sz}, magic={magic!r})")
+            os.remove(tmp)
+    except Exception as e:
+        print(f"Download failed for {url}: {e}")
+        if os.path.exists(tmp):
+            os.remove(tmp)
+sys.exit(1)
+PYDL
 fi
 
 # Bundle full 604-page Uthmani Quran JSON (~1.6 MB) so all pages work offline from first launch
