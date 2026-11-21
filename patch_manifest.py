@@ -8,6 +8,9 @@ perms = (
     '    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n'
     '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
     '    <uses-permission android:name="android.permission.VIBRATE"/>\n'
+    '    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n'
+    '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>\n'
+    '    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>\n'
 )
 queries = (
     '    <queries>\n'
@@ -36,6 +39,7 @@ if os.path.exists(styles):
         print("styles patched")
 
 # Prevent Android Lint (AndroidLintWorkAction / lintVitalAnalyzeRelease) crashes during release APK builds
+# and ensure noCompress for bundled GGML model so Android loads it fast without double extraction
 app_dir = os.path.abspath(os.path.join(os.path.dirname(path), "..", ".."))
 for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
     gpath = os.path.join(app_dir, fname)
@@ -47,13 +51,19 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
                 "        checkReleaseBuilds = false\n"
                 "        abortOnError = false\n"
                 "    }\n"
+                "    androidResources {\n"
+                "        noCompress += listOf(\"bin\")\n"
+                "    }\n"
                 if is_kts else
                 "\n    lint {\n"
                 "        checkReleaseBuilds false\n"
                 "        abortOnError false\n"
                 "    }\n"
+                "    aaptOptions {\n"
+                "        noCompress \"bin\"\n"
+                "    }\n"
             )
             g_new = re.sub(r'(android\s*\{)', r'\1' + lint_block, g, count=1)
             if g_new != g:
                 open(gpath, "w", encoding="utf-8").write(g_new)
-                print(f"{fname} patched (disabled release lint crash)")
+                print(f"{fname} patched (disabled release lint crash + noCompress bin)")

@@ -3854,7 +3854,7 @@ html[data-theme="light"] #tasmee-exit-toast {
       </div>
 
       <!-- الاستماع -->
-      <div class="settings-item-row" onclick="toggleSubSetting('sub-listening')">
+      <div class="settings-item-row" onclick="toggleSubSetting('sub-listening'); refreshExternalAudioFolder();">
         <div class="settings-item-right">
           <div class="settings-item-icon">
             <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -3874,6 +3874,28 @@ html[data-theme="light"] #tasmee-exit-toast {
           <option value="Abdul_Basit_Murattal_192kbps">عبد الباسط عبد الصمد (مرتل)</option>
           <option value="Husary_128kbps">محمود خليل الحصري (المصحف المعلم)</option>
         </select>
+        <!-- External User-Accessible Audio Folder ("Quran App Audio") on Android & iOS -->
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+            <span style="font-weight:700;font-size:13px;">📂 مجلد الصوتيات الخارجي (Quran App Audio)</span>
+            <button type="button" onclick="refreshExternalAudioFolder()" style="padding:4px 10px;border-radius:8px;border:1px solid var(--accent-green);background:rgba(52,211,153,0.14);color:var(--accent-green);font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;">🔄 تحديث</button>
+          </div>
+          <div id="ext-audio-folder-path" style="font-size:11px;opacity:0.8;margin-bottom:8px;word-break:break-word;">انسخ ملفات MP3 / M4A / AAC / WAV / FLAC إلى مجلد Quran App Audio من مدير الملفات واضغط تحديث.</div>
+          <div id="ext-audio-file-list" style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;"></div>
+          <div id="ext-audio-player-bar" style="display:none;margin-top:8px;padding:8px;border-radius:10px;background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.3);">
+            <div id="ext-audio-now-title" style="font-size:12px;font-weight:700;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
+            <input type="range" id="ext-audio-seek" min="0" max="100" value="0" style="width:100%;accent-color:var(--accent-green);" oninput="seekExternalAudio(this.value)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;">
+              <div style="display:flex;gap:6px;">
+                <button type="button" onclick="stepExternalAudio(-1)" class="skip-btn" title="السابق">⏮</button>
+                <button type="button" id="ext-audio-play-btn" onclick="toggleExternalAudioPlay()" class="skip-btn" title="تشغيل/إيقاف">▶️</button>
+                <button type="button" onclick="restartExternalAudio()" class="skip-btn" title="إعادة من البداية">↺</button>
+                <button type="button" onclick="stepExternalAudio(1)" class="skip-btn" title="التالي">⏭</button>
+              </div>
+              <input type="range" id="ext-audio-vol" min="0" max="100" value="100" style="width:74px;accent-color:var(--accent-green);" oninput="setExternalAudioVolume(this.value)" title="مستوى الصوت">
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4797,8 +4819,14 @@ if (window.Tasmee) {
       window.__sr = this;
     }
     start() {
-      const off = !navigator.onLine;
-      Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: off, partialResults: true }));
+      let promptHint = '';
+      try {
+        if (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList) && currentWordList.length > 0) {
+          const stIdx = Math.max(0, (typeof currentWordIndex === 'number' ? currentWordIndex : 0) - 2);
+          promptHint = currentWordList.slice(stIdx, stIdx + 24).map(w => w && w.t ? w.t : '').filter(Boolean).join(' ');
+        }
+      } catch (_) {}
+      Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: true, partialResults: true, prompt: promptHint }));
     }
     stop() {
       Tasmee.postMessage(JSON.stringify({ a: 'stop' }));
@@ -4886,6 +4914,124 @@ window.__tasmeeHandleBack = function() {
   } catch (_) {}
   // 4. Already on Main Screen -> let Flutter handle double-back-to-exit
   return 'home';
+};
+
+// --- Bundled 604-Page Offline Quran Hydration (from assets/data/quran_full_604.json) ---
+window.__onBundledQuranLoaded = function(rawJson) {
+  try {
+    if (!rawJson) return;
+    const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+    if (parsed && parsed.data && Array.isArray(parsed.data.surahs) && typeof FULL_QURAN_CACHE !== 'undefined' && !FULL_QURAN_CACHE) {
+      FULL_QURAN_CACHE = parsed.data;
+    }
+  } catch (_) {}
+};
+
+// --- External User-Accessible Audio Folder ("Quran App Audio") Offline Player ---
+let extAudioFiles = [];
+let extAudioIdx = -1;
+let extAudioPlaying = false;
+let extAudioDurationMs = 0;
+let extAudioPosMs = 0;
+
+function refreshExternalAudioFolder() {
+  if (window.TasmeeLocalAudio) {
+    TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'list' }));
+  } else {
+    const el = document.getElementById('ext-audio-folder-path');
+    if (el) el.textContent = '📂 متاح داخل تطبيق الهاتف (Android: Music/Quran App Audio • iOS: Files/مُسمِّع/Quran App Audio)';
+  }
+}
+
+function renderExternalAudioList() {
+  const listEl = document.getElementById('ext-audio-file-list');
+  if (!listEl) return;
+  if (!extAudioFiles.length) {
+    listEl.innerHTML = '<div style="font-size:12px;opacity:0.75;padding:6px;">لا توجد ملفات صوتية بعد — انسخ ملفات MP3 أو M4A أو WAV إلى مجلد Quran App Audio ثم اضغط تحديث.</div>';
+    return;
+  }
+  listEl.innerHTML = extAudioFiles.map((f, idx) => {
+    const active = idx === extAudioIdx;
+    const mb = (f.size / (1024 * 1024)).toFixed(1);
+    return `<button type="button" onclick="playExternalAudioAt(${idx})" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:7px 10px;border-radius:8px;border:1px solid ${active ? 'var(--accent-green)' : 'rgba(255,255,255,0.12)'};background:${active ? 'rgba(52,211,153,0.16)' : 'rgba(255,255,255,0.04)'};color:inherit;font-family:inherit;font-size:12.5px;text-align:right;cursor:pointer;">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${active && extAudioPlaying ? '🔊 ' : '🎵 '}${f.name}</span>
+      <span style="font-size:10.5px;opacity:0.75;flex-shrink:0;">${f.ext} • ${mb}MB</span>
+    </button>`;
+  }).join('');
+}
+
+function playExternalAudioAt(idx) {
+  if (idx < 0 || idx >= extAudioFiles.length || !window.TasmeeLocalAudio) return;
+  extAudioIdx = idx;
+  const f = extAudioFiles[idx];
+  let savedPos = 0;
+  try { savedPos = Number(localStorage.getItem('tasmee_ext_pos_' + f.name) || 0); } catch (_) {}
+  TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'play', path: f.path, seekMs: savedPos }));
+  const bar = document.getElementById('ext-audio-player-bar');
+  const title = document.getElementById('ext-audio-now-title');
+  if (bar) bar.style.display = 'block';
+  if (title) title.textContent = f.name;
+  renderExternalAudioList();
+}
+
+function toggleExternalAudioPlay() {
+  if (!window.TasmeeLocalAudio) return;
+  if (extAudioIdx < 0 && extAudioFiles.length > 0) { playExternalAudioAt(0); return; }
+  TasmeeLocalAudio.postMessage(JSON.stringify({ a: extAudioPlaying ? 'pause' : 'resume' }));
+}
+
+function restartExternalAudio() {
+  if (!window.TasmeeLocalAudio || extAudioIdx < 0) return;
+  TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'seek', ms: 0 }));
+  if (!extAudioPlaying) TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'resume' }));
+}
+
+function stepExternalAudio(delta) {
+  if (!extAudioFiles.length) return;
+  const next = (extAudioIdx + delta + extAudioFiles.length) % extAudioFiles.length;
+  playExternalAudioAt(next);
+}
+
+function seekExternalAudio(pct) {
+  if (!window.TasmeeLocalAudio || extAudioDurationMs <= 0) return;
+  const ms = Math.round((Number(pct) / 100) * extAudioDurationMs);
+  TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'seek', ms }));
+}
+
+function setExternalAudioVolume(pct) {
+  if (!window.TasmeeLocalAudio) return;
+  TasmeeLocalAudio.postMessage(JSON.stringify({ a: 'volume', v: Math.max(0, Math.min(1, Number(pct) / 100)) }));
+}
+
+window.__localAudioEvent = function(type, data) {
+  if (type === 'list' && data) {
+    extAudioFiles = Array.isArray(data.files) ? data.files : [];
+    const pathEl = document.getElementById('ext-audio-folder-path');
+    if (pathEl && data.path) pathEl.textContent = '📍 المسار: ' + data.path;
+    renderExternalAudioList();
+  } else if (type === 'duration' && data) {
+    extAudioDurationMs = Number(data.ms) || 0;
+  } else if (type === 'position' && data) {
+    extAudioPosMs = Number(data.ms) || 0;
+    const seekEl = document.getElementById('ext-audio-seek');
+    if (seekEl && extAudioDurationMs > 0) {
+      seekEl.value = String(Math.min(100, Math.round((extAudioPosMs / extAudioDurationMs) * 100)));
+    }
+    if (extAudioIdx >= 0 && extAudioFiles[extAudioIdx]) {
+      try { localStorage.setItem('tasmee_ext_pos_' + extAudioFiles[extAudioIdx].name, String(extAudioPosMs)); } catch (_) {}
+    }
+  } else if (type === 'state' && data) {
+    extAudioPlaying = !!data.playing;
+    const btn = document.getElementById('ext-audio-play-btn');
+    if (btn) btn.textContent = extAudioPlaying ? '⏸' : '▶️';
+    renderExternalAudioList();
+  } else if (type === 'completed') {
+    extAudioPlaying = false;
+    if (extAudioIdx >= 0 && extAudioFiles[extAudioIdx]) {
+      try { localStorage.setItem('tasmee_ext_pos_' + extAudioFiles[extAudioIdx].name, '0'); } catch (_) {}
+    }
+    if (extAudioFiles.length > 1) stepExternalAudio(1);
+  }
 };
 
 // Complete 114 Surahs Metadata

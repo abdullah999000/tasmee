@@ -1,19 +1,26 @@
 name: tasmee
-description: مُسمِّع - تصحيح التلاوة
+description: مُسمِّع - تصحيح التلاوة دون إنترنت
 publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
+  sdk: ">=3.7.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   webview_flutter: ^4.10.0
   speech_to_text: ^7.0.0
+  whisper_ggml: ^2.9.0
+  record: ^6.1.1
+  audioplayers: ^6.1.0
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
   wakelock_plus: ^1.2.8
 
 flutter:
   uses-material-design: true
   assets:
     - assets/index.html
+    - assets/models/
+    - assets/data/
