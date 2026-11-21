@@ -7187,13 +7187,17 @@ function triggerMistakeOnCurrentWord(spokenToken, errorType) {
 
   // 2. Count it in page wordErrors and persistent savedMistakes bank
   if (!wordErrors.some(e => e.index === currentWordIndex)) {
+    const _prevWordTxt = currentWordIndex > 0 ? (currentWordList[currentWordIndex - 1]?.t || '') : '';
     wordErrors.push({
       index: currentWordIndex,
       expected: currentExpected,
       spoken: spokenToken || '',
       type: errKind,
       ayah: currentObj?.a || 1,
-      surah: currentObj?.s || 2
+      surah: currentObj?.s || 2,
+      atWaqf: (lastWaqfPauseWordIdx >= currentWordIndex - 2) || hasWaqfMark(_prevWordTxt),
+      offline: !!(typeof window !== 'undefined' && window.__isOfflineWhisperMode),
+      ts: Date.now()
     });
   }
   if (!(stopOnErrorMandatory && haltError && haltError.index === currentWordIndex)) {
@@ -7839,13 +7843,39 @@ function isNoiseFragment(token, expected) {
   return false;
 }
 
+// PDF Sec 13.3 & 16.3: Quranic Waqf signs (إرشادي فقط — valid Waqf never causes an error)
+const WAQF_MARKS_RE = /[\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED۞]/;
+let lastWaqfPauseWordIdx = -1;
+
+function hasWaqfMark(txt) {
+  return !!(txt && WAQF_MARKS_RE.test(String(txt)));
+}
+
 function isQuranPauseMark(txt) {
   const clean = normArabic(txt);
   return !clean || clean.length === 0;
 }
 
+// PDF Sec 16.3: Handle Idgham/Ikhfa boundary assimilation where ASR merges two adjacent words (e.g. من ربهم -> مربهم, أن لن -> الن)
+function isIdghamMergedMatch(spokenToken, w1, w2) {
+  if (!spokenToken || !w1 || !w2) return false;
+  const sp = normArabic(spokenToken).replace(/\s+/g, '');
+  const a = normArabic(w1).replace(/\s+/g, '');
+  const b = normArabic(w2).replace(/\s+/g, '');
+  if (!sp || !a || !b) return false;
+  if (isWordMatch(sp, a + b)) return true;
+  if (a.endsWith('ن') && a.length >= 2 && /^[يرملون]/.test(b)) {
+    const assimilated = a.slice(0, -1) + b;
+    if (isWordMatch(sp, assimilated)) return true;
+  }
+  return false;
+}
+
 function advancePastPauseMarks() {
   while (currentWordIndex < currentWordList.length && isQuranPauseMark(currentWordList[currentWordIndex]?.t)) {
+    if (hasWaqfMark(currentWordList[currentWordIndex]?.t)) {
+      lastWaqfPauseWordIdx = currentWordIndex;
+    }
     wordStates[currentWordIndex] = 'ok';
     currentWordIndex++;
   }
@@ -8786,9 +8816,13 @@ function processRecitedText(text, isFinal) {
       isWordMatch(tokens[0], curExp) ||
       (tokens.length > 1 && isWordMatch(tokens[0] + tokens[1], curExp))
     );
+    let nxtNxtLiveIdx = nxtLiveIdx + 1;
+    while (nxtNxtLiveIdx < currentWordList.length && isQuranPauseMark(currentWordList[nxtNxtLiveIdx]?.t)) nxtNxtLiveIdx++;
+    const nxtNxtExp = currentWordList[nxtNxtLiveIdx]?.t || '';
     const matchesNextAfterCurrent = tokens.length >= 2 && nxtExp && (
       isWordMatch(tokens[1], nxtExp) ||
-      (tokens.length > 2 && isWordMatch(tokens[1] + tokens[2], nxtExp))
+      (tokens.length > 2 && isWordMatch(tokens[1] + tokens[2], nxtExp)) ||
+      (nxtNxtExp && isIdghamMergedMatch(tokens[1], nxtExp, nxtNxtExp))
     );
 
     // Priority 1: If reading from the current cursor (top of page word 0, tapped word, or paused resume spot),
@@ -8919,7 +8953,7 @@ function processRecitedText(text, isFinal) {
       (isMuqattaahMatch(token + nextToken + nextNextToken, currentExpected) ||
        (normArabic(currentExpected).length >= 7 && isWordMatch(token + nextToken + nextNextToken, currentExpected)));
     const compoundWithPrev = !directMatch && !compoundWithNext && !compoundWithNext2 && prevToken && isWordMatch(prevToken + token, currentExpected);
-    const splitTwoExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && nextExpected && isWordMatch(token, currentExpected + nextExpected);
+    const splitTwoExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && nextExpected && (isWordMatch(token, currentExpected + nextExpected) || isIdghamMergedMatch(token, currentExpected, nextExpected));
     const splitThreeExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && nextExpected && nextNextExpected
       && normArabic(currentExpected + nextExpected + nextNextExpected).length >= 7 && isWordMatch(token, currentExpected + nextExpected + nextNextExpected);
     const altMatch = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected &&
