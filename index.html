@@ -4860,6 +4860,10 @@ if (window.Tasmee) {
       r.onresult({ resultIndex: 0, results: [it] });
     } else if (type === 'error' && r.onerror) {
       r.onerror({ error: (data && data.error) ? data.error : data });
+    } else if (type === 'level') {
+      if (typeof updateMicVisualActivity === 'function') {
+        updateMicVisualActivity(Number(data) || 0);
+      }
     } else if (type === 'status') {
       const pv = document.getElementById('live-heard-preview');
       if (pv && data) pv.textContent = String(data);
@@ -4934,15 +4938,56 @@ window.__tasmeeHandleBack = function() {
   return 'home';
 };
 
-// --- Bundled 604-Page Offline Quran Hydration (from assets/data/quran_full_604.json) ---
+// --- Bundled 604-Page Offline Quran Hydration & On-Demand Native Page Bridge ---
 window.__onBundledQuranLoaded = function(rawJson) {
   try {
     if (!rawJson) return;
     const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
-    if (parsed && parsed.data && Array.isArray(parsed.data.surahs) && typeof FULL_QURAN_CACHE !== 'undefined' && !FULL_QURAN_CACHE) {
-      FULL_QURAN_CACHE = parsed.data;
+    if (parsed && parsed.data && Array.isArray(parsed.data.surahs)) {
+      const flat = [];
+      parsed.data.surahs.forEach(s => {
+        (s.ayahs || []).forEach(a => {
+          flat.push({ s: s.number, a: a.numberInSurah, p: a.page, t: a.text });
+        });
+      });
+      if (flat.length > 0) {
+        FULL_QURAN_CACHE = flat;
+      }
     }
   } catch (_) {}
+};
+
+const __nativePagePending = new Map();
+let __nativePageReqSeq = 1;
+window.__onNativePageLoaded = function(reqId, pageNumber, verses) {
+  const resolver = __nativePagePending.get(String(reqId));
+  if (resolver) {
+    __nativePagePending.delete(String(reqId));
+    resolver(Array.isArray(verses) ? verses : []);
+  }
+};
+window.__requestNativePage = function(pageNumber) {
+  return new Promise(resolve => {
+    if (!window.Tasmee || pageNumber < 1 || pageNumber > 604) { resolve([]); return; }
+    const reqId = 'pg_' + (__nativePageReqSeq++);
+    const timer = setTimeout(() => {
+      if (__nativePagePending.has(reqId)) {
+        __nativePagePending.delete(reqId);
+        resolve([]);
+      }
+    }, 2500);
+    __nativePagePending.set(reqId, (verses) => {
+      clearTimeout(timer);
+      resolve(verses);
+    });
+    try {
+      Tasmee.postMessage(JSON.stringify({ a: 'get_page', p: pageNumber, reqId }));
+    } catch (_) {
+      clearTimeout(timer);
+      __nativePagePending.delete(reqId);
+      resolve([]);
+    }
+  });
 };
 
 // --- External User-Accessible Audio Folder ("Quran App Audio") Offline Player ---
@@ -6112,25 +6157,70 @@ async function fetchQcfPageFromAPI(pageNumber) {
   };
   try { localStorage.setItem('qpg_qcf_v4_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
   try { localStorage.setItem('qpg_full_' + pageNumber, JSON.stringify(pageData)); } catch (_) {}
+  try { if (typeof idbSet === 'function') idbSet('qpg_qcf_v4_' + pageNumber, pageData); } catch (_) {}
   return pageData;
 }
 
 async function fetchPageDataByNumber(pageNumber) {
   if (!FULL_QURAN_CACHE) { try { await loadFullQuranFromStorage(); } catch (_) {} }
-  // 1. Prefer cached QCF V4 page (has code_v2 + exact 15-line line_number)
-  const qcfCached = getCachedQcfPage(pageNumber);
+  // 1. Prefer permanently cached QCF V4 page (localStorage OR IndexedDB — persists across restarts & beyond 5MB!)
+  let qcfCached = getCachedQcfPage(pageNumber);
+  if (!qcfCached && typeof idbGet === 'function') {
+    try {
+      const idbQcf = await idbGet('qpg_qcf_v4_' + pageNumber);
+      if (idbQcf && idbQcf.qcf && Array.isArray(idbQcf.words) && idbQcf.words.length > 0) {
+        qcfCached = idbQcf;
+      }
+    } catch (_) {}
+  }
   if (qcfCached) {
     ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
     return qcfCached;
   }
-  // 2. If we have an instant local/precached page, return it immediately and upgrade to QCF V4 seamlessly in background
+  // 2. Check instant local/precached page (memory, localStorage, IndexedDB, or native bundled 604-page APK asset!)
   let memData = getPageDataFromMemory(pageNumber, false);
+  if (!memData && typeof idbGet === 'function') {
+    try {
+      const idbPg = await idbGet('qpg_full_' + pageNumber);
+      if (idbPg && Array.isArray(idbPg.words) && idbPg.words.length > 0) memData = idbPg;
+    } catch (_) {}
+  }
+  if (!memData && typeof window.__requestNativePage === 'function' && window.Tasmee) {
+    try {
+      const nativeVerses = await window.__requestNativePage(pageNumber);
+      if (Array.isArray(nativeVerses) && nativeVerses.length > 0) {
+        const words = [];
+        const sNum = nativeVerses[0].s || 1;
+        nativeVerses.forEach(v => {
+          const ws = String(v.t || '').split(/\s+/).filter(Boolean);
+          ws.forEach((wText, idx) => words.push({
+            t: wText,
+            s: v.s,
+            a: v.a,
+            end: idx === ws.length - 1
+          }));
+        });
+        if (words.length > 0) {
+          const surahObj = ALL_SURAHS.find(s => s.s === sNum) || ALL_SURAHS[0];
+          const juzNum = getJuzByPage(pageNumber);
+          memData = {
+            surahNumber: sNum,
+            surahName: 'سورة ' + surahObj.n,
+            pageNumber: pageNumber,
+            juzNumber: juzNum,
+            hizbNumber: Math.ceil(juzNum * 2 - 1),
+            words: words
+          };
+          try { if (typeof idbSet === 'function') idbSet('qpg_full_' + pageNumber, memData); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
   if (memData) {
     if (typeof navigator === 'undefined' || navigator.onLine !== false) {
       fetchQcfPageFromAPI(pageNumber).then(upgraded => {
         ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
         if (pageNumber === currentPage && upgraded && upgraded.words.length === currentWordList.length) {
-          // Upgrade visual glyphs & line_number in-place without disturbing recitation pointer or wordStates!
           for (let k = 0; k < currentWordList.length; k++) {
             currentWordList[k].c2 = upgraded.words[k].c2;
             currentWordList[k].q = upgraded.words[k].q;
@@ -6142,7 +6232,7 @@ async function fetchPageDataByNumber(pageNumber) {
     }
     return memData;
   }
-  // 3. Fetch full QCF V4 page directly from API
+  // 3. Online fallback: fetch full QCF V4 page directly from API
   try {
     const fetched = await fetchQcfPageFromAPI(pageNumber);
     ensureQcfFontForPage(pageNumber, pageNumber !== currentPage);
