@@ -4836,6 +4836,8 @@ if (window.Tasmee) {
     start() {
       const promptHint = this._buildCleanPrompt();
       const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
+      const pv = document.getElementById('live-heard-preview');
+      if (pv) pv.textContent = '⏳ [1] جارٍ تشغيل الميكروفون...';
       Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint }));
     }
     resetSession() {
