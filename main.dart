@@ -758,34 +758,52 @@ class _HomeState extends State<Home> {
       await _stopOfflineFastConformer();
       await _stopOfflineWhisperLive(emitFinal: false);
 
+      final supDir = await getApplicationSupportDirectory();
+      final sentinel = File('${supDir.path}/fc_init.lock');
+      if (await sentinel.exists()) {
+        // Prior launch crashed natively while loading FastConformer -> safely fall back to Whisper instead of crashing again!
+        try { await sentinel.delete(); } catch (_) {}
+        _js('status', '⚠️ تم تجاوز FastConformer تلقائيًا بعد إغلاق سابق — جاري التشغيل بمحرك Whisper الآمن');
+        return false;
+      }
+
+      // Free parked Whisper memory before loading 456MB FastConformer ONNX encoder
+      try { _whisper.releaseModel(); } catch (_) {}
+
       final dir = await _fastConformerDir();
       if (!_sherpaBindingsInited) {
         sherpa.initBindings();
         _sherpaBindingsInited = true;
       }
       if (_sherpaRecognizer == null) {
-        final transducer = sherpa.OnlineTransducerModelConfig(
-          encoder: '${dir.path}/encoder.onnx',
-          decoder: '${dir.path}/decoder.onnx',
-          joiner: '${dir.path}/joiner.onnx',
-        );
-        final model = sherpa.OnlineModelConfig(
-          transducer: transducer,
-          tokens: '${dir.path}/tokens.txt',
-          modelType: 'transducer',
-          numThreads: 2,
-          provider: 'cpu',
-        );
-        _sherpaRecognizer = sherpa.OnlineRecognizer(
-          sherpa.OnlineRecognizerConfig(
-            model: model,
-            decodingMethod: 'greedy_search',
-            enableEndpoint: true,
-            rule1MinTrailingSilence: 2.4,
-            rule2MinTrailingSilence: 1.2,
-            rule3MinUtteranceLength: 30.0,
-          ),
-        );
+        await sentinel.writeAsString('init', flush: true);
+        try {
+          final transducer = sherpa.OnlineTransducerModelConfig(
+            encoder: '${dir.path}/encoder.onnx',
+            decoder: '${dir.path}/decoder.onnx',
+            joiner: '${dir.path}/joiner.onnx',
+          );
+          // Use modelType: '' (auto-detect from ONNX metadata) so sherpa-onnx C++ never aborts on 'transducer'
+          final model = sherpa.OnlineModelConfig(
+            transducer: transducer,
+            tokens: '${dir.path}/tokens.txt',
+            modelType: '',
+            numThreads: 2,
+            provider: 'cpu',
+          );
+          _sherpaRecognizer = sherpa.OnlineRecognizer(
+            sherpa.OnlineRecognizerConfig(
+              model: model,
+              decodingMethod: 'greedy_search',
+              enableEndpoint: true,
+              rule1MinTrailingSilence: 2.4,
+              rule2MinTrailingSilence: 1.2,
+              rule3MinUtteranceLength: 30.0,
+            ),
+          );
+        } finally {
+          try { if (await sentinel.exists()) await sentinel.delete(); } catch (_) {}
+        }
       }
 
       _sherpaStream = _sherpaRecognizer!.createStream();
