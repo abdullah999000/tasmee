@@ -9,6 +9,10 @@ cd "$(dirname "$0")"
 
 mkdir -p assets/models assets/data
 
+if [ -f main.dart ]; then
+  mkdir -p lib
+  cp -f main.dart lib/main.dart
+fi
 if [ -f index.html ]; then
   cp -f index.html assets/index.html
   cp -f index.html preview.html

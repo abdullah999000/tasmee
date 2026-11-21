@@ -4850,6 +4850,17 @@ if (window.Tasmee) {
     }
   };
   window.__srEvent = (type, data) => {
+    if (type === 'level') {
+      if (typeof updateMicVisualActivity === 'function') {
+        updateMicVisualActivity(Number(data) || 0);
+      }
+      return;
+    }
+    if (type === 'status') {
+      const pv = document.getElementById('live-heard-preview');
+      if (pv && data) pv.textContent = String(data);
+      return;
+    }
     const r = window.__sr; if (!r) return;
     if (type === 'result' && r.onresult) {
       const txt = typeof data === 'string' ? data : ((data && (data.text || data.transcript)) || '');
@@ -4862,13 +4873,6 @@ if (window.Tasmee) {
       r.onresult({ resultIndex: 0, results: [it] });
     } else if (type === 'error' && r.onerror) {
       r.onerror({ error: (data && data.error) ? data.error : data });
-    } else if (type === 'level') {
-      if (typeof updateMicVisualActivity === 'function') {
-        updateMicVisualActivity(Number(data) || 0);
-      }
-    } else if (type === 'status') {
-      const pv = document.getElementById('live-heard-preview');
-      if (pv && data) pv.textContent = String(data);
     } else if (type === 'end' && r.onend) {
       r.onend();
     }
