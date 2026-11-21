@@ -5527,6 +5527,10 @@ let isHidingWords = false;
 let isAudioPlaying = false;
 let audioPlayer = null;
 let stopOnErrorMandatory = true; // true: halts at error and requires correction; false: marks error and continues seamlessly
+try {
+  const _savedStop = localStorage.getItem('tasmee_stop_on_error');
+  if (_savedStop !== null) stopOnErrorMandatory = (_savedStop === '1');
+} catch (_) {}
 
 let currentWordList = [];
 let wordElements = [];
@@ -6631,23 +6635,35 @@ btnRecite.oncontextmenu = (e) => {
 };
 
 // Toggle Stop-on-Error Mode (Mandatory Halt vs Continuous Skip Flow)
-function toggleStopOnErrorMode() {
-  stopOnErrorMandatory = !stopOnErrorMandatory;
+function syncStopOnErrorUI() {
   const btn = document.getElementById('btn-toggle-stop-mode');
   const cfg = document.getElementById('cfg-stop-on-error');
   if (cfg) cfg.checked = stopOnErrorMandatory;
-
   if (btn) {
     btn.classList.toggle('stop-active', stopOnErrorMandatory);
     btn.classList.toggle('active', !stopOnErrorMandatory);
     btn.title = stopOnErrorMandatory
-      ? 'وضع التوقف الإجباري عند الخطأ مفعّل (اضغط للتبديل لتخطي الأخطاء)'
-      : 'وضع تخطي الأخطاء مفعّل (يلون الخطأ بالأحمر مع جرس التنبيه ويكمل التلاوة)';
+      ? 'وضع التوقف الإجباري عند الخطأ مفعّل (اضغط لإيقافه والمتابعة المستمرة)'
+      : 'وضع التوقف عند الخطأ غير مفعّل (يسجل الخطأ ويكمل التلاوة)';
   }
+}
+
+function toggleStopOnErrorMode() {
+  stopOnErrorMandatory = !stopOnErrorMandatory;
+  try { localStorage.setItem('tasmee_stop_on_error', stopOnErrorMandatory ? '1' : '0'); } catch (_) {}
+  syncStopOnErrorUI();
   if (!stopOnErrorMandatory && haltError) {
     skipCurrentHaltWord();
   }
   updateLiveReciteMonitorUI();
+  if (typeof updateProgressBadge === 'function') updateProgressBadge();
+  if (typeof window.__tasmeeShowExitToast === 'function') {
+    window.__tasmeeShowExitToast(
+      stopOnErrorMandatory
+        ? '🛑 التوقف عند الخطأ: مفعّل'
+        : '▶️ التوقف عند الخطأ: متوقف (تسميع مستمر)'
+    );
+  }
 }
 
 // Skip current halted word manually if user clicks "تجاوز"
@@ -8070,7 +8086,9 @@ function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
   return -1;
 }
 
-// Detect deliberate temporary excursion to a DIFFERENT ayah on the page (2+ consecutive words starting at a different ayah)
+// Detect deliberate temporary excursion to a DIFFERENT ayah on the page (2+ consecutive words starting at a different ayah).
+// CRITICAL: When stopOnErrorMandatory is ON, NEVER jump forward (k >= cur) over unread/mistaken words!
+// Even when OFF, never treat jumping straight to the immediate next ayah (k > cur && w.a === curAyah + 1) as a harmless excursion.
 function detectDifferentAyahExcursion(token, nextToken) {
   if (isQuizModeActive || !token || !nextToken) return -1;
   const cur = currentWordIndex, n = currentWordList.length;
@@ -8081,9 +8099,11 @@ function detectDifferentAyahExcursion(token, nextToken) {
   let best = -1, bestDist = 1e9;
   for (let k = 0; k < n; k++) {
     if (!live(k)) continue;
+    if (stopOnErrorMandatory && k >= cur) continue;
     const w = currentWordList[k];
-    // Must be a DIFFERENT ayah (so a 1-word omission inside the current ayah is NEVER treated as an excursion!)
+    // Must be a DIFFERENT ayah (and never forward into immediate next ayah over unread words!)
     if (w.a === curAyah && w.s === curSurah) continue;
+    if (k > cur && w.s === curSurah && w.a === curAyah + 1) continue;
     // Must be at the beginning of that ayah (first 2 words) to avoid accidental mid-ayah phrase jumps
     const aStart = ayahStartOf(k);
     if (k - aStart > 1) continue;
@@ -8494,8 +8514,9 @@ function processRecitedText(text, isFinal) {
     const splitThreeExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && nextExpected && nextNextExpected
       && normArabic(currentExpected + nextExpected + nextNextExpected).length >= 7 && isWordMatch(token, currentExpected + nextExpected + nextNextExpected);
     const altMatch = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected &&
-      isReciting && altSaysCorrect(currentExpected, tokensAfter);
-    const verifiedSlip = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected && !altMatch &&
+      isReciting && altSaysCorrect(currentExpected, (stopOnErrorMandatory && haltError) ? 1 : tokensAfter);
+    const verifiedSlip = !(stopOnErrorMandatory && haltError) &&
+      !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected && !altMatch &&
       isRecognizerSlip(token, currentExpected, nextToken, nextExpected);
 
     if (directMatch || compoundWithNext || compoundWithNext2 || compoundWithPrev || splitTwoExpected || splitThreeExpected || altMatch || verifiedSlip) {
@@ -8541,40 +8562,44 @@ function processRecitedText(text, isFinal) {
       continue;
     }
 
-    // ---- 2a. returning to the Primary Anchor after a temporary excursion (e.g. Ayah 10 -> back to Ayah 20) ----
-    const retAnchor = checkReturnToPrimaryAnchor(token, nextToken, prevToken);
-    if (retAnchor >= 0) {
-      lastProcessedTokenCount = gi + 1;
-      restoreToPrimaryAnchor(retAnchor);
-      continue;
+    // ---- 2a. returning to the Primary Anchor after a temporary excursion (blocked if strictly halted on an error) ----
+    if (!(stopOnErrorMandatory && haltError)) {
+      const retAnchor = checkReturnToPrimaryAnchor(token, nextToken, prevToken);
+      if (retAnchor >= 0) {
+        lastProcessedTokenCount = gi + 1;
+        restoreToPrimaryAnchor(retAnchor);
+        continue;
+      }
     }
 
     // ---- 2b. the reader went back to repeat an ayah / a few words (context-aware replay) ----
     const rp = detectReplayTarget(prevToken, token, nextToken, isFinal);
-    if (rp >= 0) {
+    if (rp >= 0 && (!(stopOnErrorMandatory && haltError) || rp < currentWordIndex)) {
       lastProcessedTokenCount = gi + 1;
       applyRewindToIndex(rp);
       continue;
     }
-    if (rp === -2) {
+    if (rp === -2 && !(stopOnErrorMandatory && haltError)) {
       // Ambiguous start word matching multiple similar ayahs on the page: wait for next word to disambiguate!
       scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, true);
       break;
     }
 
-    // ---- 2c. temporary excursion to a different ayah on the page OR an ayah on the previous page ----
-    const diffAyahIdx = detectDifferentAyahExcursion(token, nextToken);
-    if (diffAyahIdx >= 0) {
-      lastProcessedTokenCount = gi + 1;
-      applyRewindToIndex(diffAyahIdx);
-      continue;
-    }
-    const offPageSpan = earlierPageExcursionSpan(tokens, gi);
-    if (offPageSpan >= 2) {
-      i += offPageSpan - 1;
-      lastProcessedTokenCount = gi + offPageSpan;
-      smartStatus('📖 تلاوة من موضع سابق — عند عودتك للآية الحالية سيكمل التسميع تلقائياً');
-      continue;
+    // ---- 2c. temporary excursion to a different ayah on the page OR previous page (strictly blocked while halted on an error!) ----
+    if (!(stopOnErrorMandatory && haltError)) {
+      const diffAyahIdx = detectDifferentAyahExcursion(token, nextToken);
+      if (diffAyahIdx >= 0) {
+        lastProcessedTokenCount = gi + 1;
+        applyRewindToIndex(diffAyahIdx);
+        continue;
+      }
+      const offPageSpan = earlierPageExcursionSpan(tokens, gi);
+      if (offPageSpan >= 2) {
+        i += offPageSpan - 1;
+        lastProcessedTokenCount = gi + offPageSpan;
+        smartStatus('📖 تلاوة من موضع سابق — عند عودتك للآية الحالية سيكمل التسميع تلقائياً');
+        continue;
+      }
     }
 
     // ---- 3. harmless echo of the exact word just read (avoids false errors on breath/ASR duplicate) ----
@@ -11125,7 +11150,8 @@ function stopSheikhAudioPlayback() {
 // INITIALIZATION
 // ==========================================================================
 (function init() {
-  const savedFontSize = localStorage.getItem('tasmee_font_size') || 26;
+  syncStopOnErrorUI();
+  const savedFontSize = localStorage.getItem('tasmee_font_size') || 28;
 try { const _ss = document.getElementById('cfg-smart-start'); if (_ss) _ss.checked = smartStartEnabled; } catch (_) {}
   adjustFontSize(savedFontSize);
   const afCb = document.getElementById('cfg-autofit'); if (afCb) afCb.checked = autoFitPage;
