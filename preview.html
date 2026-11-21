@@ -2256,6 +2256,30 @@ html[data-theme="light"] .live-heard-preview {
   color: #34d399 !important;
   border-bottom: 2px solid #fbbf24;
 }
+/* Peeked word (الاستراق عند التعثر - لون بني مميز كما في المرجع) */
+.w.peeked {
+  color: #d97706 !important;
+  background: rgba(217, 119, 6, 0.14);
+  border-bottom: 2px dashed #d97706;
+  border-radius: 4px;
+}
+html[data-theme="light"] .w.peeked {
+  color: #92400e !important;
+  background: rgba(180, 83, 9, 0.12);
+  border-bottom-color: #b45309;
+}
+/* Swapped word order (تبديل ترتيب كلمتين) */
+.w.swap {
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.15);
+  border-bottom: 2px dotted #f59e0b;
+}
+/* Hide Ayah Number Markers in strict memorization mode */
+.hide-ayah-markers .ayah-num-dark,
+.hide-ayah-markers .ayah-num-light {
+  opacity: 0 !important;
+  pointer-events: none;
+}
 
 /* Ayah end marker in Dark Mode */
 .ayah-num-dark {
@@ -3564,10 +3588,22 @@ html[data-theme="light"] #tasmee-exit-toast {
       </div>
     </div>
 
-    <!-- Recitation Halt Alert Bar (Appears when halted at error) -->
+    <!-- 4-Second Silence Gentle Hint / Peek Bar (Appears without alarm when user pauses to recall) -->
+    <div class="halt-alert-bar" id="silence-peek-bar" style="display: none; background: linear-gradient(90deg, #92400e, #b45309); box-shadow: 0 4px 14px rgba(180, 83, 9, 0.35);">
+      <span>💡 تلميح عند التوقف (دون خطأ):</span>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="skip-btn" onclick="peekNextWord()">كلمة واحدة</button>
+        <button class="skip-btn" onclick="peekCurrentAyah()">الآية كاملة</button>
+      </div>
+    </div>
+
+    <!-- Recitation Halt Alert Bar (Appears when halted at error, with Heard vs Expected & False Alarm button) -->
     <div class="halt-alert-bar" id="halt-alert-bar" style="display: none;">
-      <span>❌ خطأ عند كلمة «<b id="halt-word-name">...</b>» — أعد قراءتها صحيحة لتكمل</span>
-      <button class="skip-btn" onclick="skipCurrentHaltWord()">تجاوز ⏭</button>
+      <span>❌ خطأ عند «<b id="halt-word-name">...</b>»<span id="halt-heard-note" style="opacity:0.9;font-size:12px;"></span></span>
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="skip-btn" style="background:rgba(16,185,129,0.28);border-color:rgba(16,185,129,0.6);" onclick="markFalseAlarmAndAdvance()" title="وسم كإنذار خاطئ والمتابعة فوراً">✓ لم أخطئ</button>
+        <button class="skip-btn" onclick="skipCurrentHaltWord()">تجاوز ⏭</button>
+      </div>
     </div>
 
     <!-- Active Quiz Banner (Appears when testing saved mistakes) -->
@@ -3882,6 +3918,10 @@ html[data-theme="light"] #tasmee-exit-toast {
         <label style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;cursor:pointer;">
           <span>🎨 تفعيل ألوان مصحف التجويد (في الوضعين النهاري والليلي)</span>
           <input type="checkbox" id="cfg-tajweed-colors" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="toggleTajweed(this.checked)">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;cursor:pointer;">
+          <span>🙈 إخفاء أرقام الآيات عند إخفاء النص (لاختبار حفظ أدق)</span>
+          <input type="checkbox" id="cfg-hide-ayah-markers" style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="setHideAyahMarkers(this.checked)">
         </label>
       </div>
 
@@ -5717,6 +5757,18 @@ function stepFontSize(delta) {
 }
 
 // Toggle Tajweed Colors (persists setting & switches seamlessly between QCF V4 Tajweed and QCF V2 Madani)
+let hideAyahMarkersEnabled = false;
+try { hideAyahMarkersEnabled = localStorage.getItem('tasmee_hide_ayah_markers') === '1'; } catch (_) {}
+
+function setHideAyahMarkers(on) {
+  hideAyahMarkersEnabled = !!on;
+  try { localStorage.setItem('tasmee_hide_ayah_markers', hideAyahMarkersEnabled ? '1' : '0'); } catch (_) {}
+  const cb = document.getElementById('cfg-hide-ayah-markers');
+  if (cb) cb.checked = hideAyahMarkersEnabled;
+  const area = document.getElementById('mushaf-content-area');
+  if (area) area.classList.toggle('hide-ayah-markers', !!(isHidingWords && hideAyahMarkersEnabled));
+}
+
 function toggleTajweed(enabled) {
   tajweedEnabled = !!enabled;
   try { localStorage.setItem('tasmee_tajweed', tajweedEnabled ? '1' : '0'); } catch (_) {}
@@ -6376,6 +6428,7 @@ function renderCurrentPage() {
     container.innerHTML = html;
   }
 
+  if (container) container.classList.toggle('hide-ayah-markers', !!(isHidingWords && hideAyahMarkersEnabled));
   updateTopAndPageReadingIndicators();
   if (isReciting) updateLiveReciteMonitorUI();
   fitPageToScreen();
@@ -6423,27 +6476,38 @@ function showWordDetailModal(w, state, idx) {
   const surahObj = ALL_SURAHS.find(s => s.s === (w.s || 2)) || ALL_SURAHS[1];
   const stateLabels = {
     ok: "صحيحة متقنة",
-    wrong: "خطأ أو لحن جلي",
-    missed: "كلمة منسية / متجاوزة",
+    wrong: "خطأ في الكلمة",
+    missed: "كلمة ناقصة / متجاوزة",
+    swap: "تبديل ترتيب كلمتين",
+    peeked: "كلمة مُستَرقة (تلميح)",
     review: "تحتاج مراجعة وتدقيق",
     fixed: "صُحّحت ذاتياً بعد الخطأ",
     pending: "قيد التسميع"
   };
+  const errRec = (wordErrors || []).find(e => e.index === idx);
+  const heardRow = errRec && errRec.spoken
+    ? `<div>• <b>ما سُمع منك (قلتَ):</b> <span style="color:#f87171;font-weight:700;">${errRec.spoken}</span> ← <b>الصحيح:</b> <span style="color:var(--accent-green);font-weight:700;">${w.t}</span></div>`
+    : '';
+  const falseAlarmBtn = (state === 'wrong' || state === 'missed' || state === 'swap' || hasRedMark(currentPage, idx))
+    ? `<button class="pill-tab-btn" style="flex:1;border:1px solid rgba(52,211,153,0.6);color:var(--accent-green);" onclick="closeWordModal(); markFalseAlarmAndAdvance(${idx});">✓ لم أخطئ (خطأ كاذب)</button>`
+    : '';
 
   box.innerHTML = `
     <div class="modal-title-row">
-      <span class="modal-title" style="color: var(--accent-green); font-family: 'Amiri Quran', serif; font-size: 26px;">${w.t}</span>
+      <span class="modal-title" style="color: var(--accent-green); font-family: var(--mushaf-font-family); font-size: 26px;">${w.t}</span>
       <button class="btn-close" onclick="closeWordModal()">&times;</button>
     </div>
     <div style="font-size: 14px; line-height: 1.8;">
       <div>• <b>الموضع:</b> سورة ${surahObj.n} — الآية ${toArabicNum(w.a)}</div>
       <div>• <b>حالة التلاوة:</b> <span style="font-weight:700;">${stateLabels[state] || "قيد التسميع"}</span></div>
+      ${heardRow}
       <div style="margin-top: 8px; padding: 10px; background: rgba(52, 211, 153, 0.1); border-radius: 8px; border: 1px solid rgba(52, 211, 153, 0.25);">
         💡 <b>إرشاد المعلم:</b> اقرأ الكلمة بتأنٍّ مع تحقيق المخارج وحركات التشكيل، ثم واصل التلاوة.
       </div>
     </div>
     <div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
       <button class="pill-tab-btn active" style="flex:1; background: var(--accent-green); color: #000;" onclick="closeWordModal(); currentWordIndex = ${idx}; manualWordSelected = true; startRecitation();">🎤 ابدأ التسميع من هنا</button>
+      ${falseAlarmBtn}
       <button class="pill-tab-btn active" style="flex:1;" onclick="closeWordModal(); playSpecificAyahAudio(${w.s || 2}, ${w.a});">🎧 استماع للشيخ</button>
       <button class="pill-tab-btn" style="border: 1px solid var(--border-dark);" onclick="playWordTTS('${w.t}')">🔊 نطق</button>
       <button class="pill-tab-btn" style="border: 1px solid var(--border-dark);" onclick="closeWordModal()">إغلاق</button>
@@ -6696,18 +6760,119 @@ let pendingMismatchFn = null;
 let pendingMismatchMeta = null;
 
 // Central Mistake Handler: Marks RED + Rings Bell + Counts Error + Strictly Stops or Continues based on stopOnErrorMandatory
-function triggerMistakeOnCurrentWord(spokenToken) {
+// --- 4-Second Silence Hint Timer & Peeking (الاستراق) + False-Alarm Override ---
+let silenceHintTimer = null;
+let sessionPeekCount = 0;
+
+function hideSilencePeekBar() {
+  clearTimeout(silenceHintTimer);
+  silenceHintTimer = null;
+  const sb = document.getElementById('silence-peek-bar');
+  if (sb) sb.style.display = 'none';
+}
+
+function resetSilenceHintTimer() {
+  hideSilencePeekBar();
+  if (!isReciting || isQuizModeActive) return;
+  silenceHintTimer = setTimeout(() => {
+    if (!isReciting || haltError || currentWordIndex >= currentWordList.length) return;
+    const sb = document.getElementById('silence-peek-bar');
+    if (sb) sb.style.display = 'flex';
+  }, 4000);
+}
+
+function recordPeekEvent(idx, scope) {
+  sessionPeekCount++;
+  try {
+    const arr = JSON.parse(localStorage.getItem('tasmee_peeks') || '[]');
+    const w = currentWordList[idx];
+    arr.push({ page: currentPage, idx, surah: w?.s || 1, ayah: w?.a || 1, word: w?.t || '', scope, ts: Date.now() });
+    if (arr.length > 300) arr.splice(0, arr.length - 300);
+    localStorage.setItem('tasmee_peeks', JSON.stringify(arr));
+  } catch (_) {}
+}
+
+function peekNextWord() {
+  if (currentWordIndex >= currentWordList.length) return;
+  advancePastPauseMarks();
+  if (currentWordIndex >= currentWordList.length) return;
+  wordStates[currentWordIndex] = 'peeked';
+  recordPeekEvent(currentWordIndex, 'word');
+  hideSilencePeekBar();
+  renderCurrentPage();
+  autoScrollToCurrentWord(false);
+  if (isReciting) resetSilenceHintTimer();
+}
+
+function peekCurrentAyah() {
+  if (currentWordIndex >= currentWordList.length) return;
+  const curA = currentWordList[currentWordIndex]?.a;
+  const curS = currentWordList[currentWordIndex]?.s;
+  for (let k = currentWordIndex; k < currentWordList.length; k++) {
+    if (currentWordList[k]?.a !== curA || currentWordList[k]?.s !== curS) break;
+    if (!isQuranPauseMark(currentWordList[k]?.t) && wordStates[k] === 'pending') {
+      wordStates[k] = 'peeked';
+    }
+  }
+  recordPeekEvent(currentWordIndex, 'ayah');
+  hideSilencePeekBar();
+  renderCurrentPage();
+  autoScrollToCurrentWord(false);
+  if (isReciting) resetSilenceHintTimer();
+}
+
+function markFalseAlarmAndAdvance(explicitIdx) {
+  const targetIdx = typeof explicitIdx === 'number' ? explicitIdx : currentWordIndex;
+  if (targetIdx < 0 || targetIdx >= currentWordList.length) return;
+  clearTimeout(interimMistakeTimer);
+  pendingMismatchFn = null;
+  pendingMismatchMeta = null;
+  // Log local false-alarm feedback for calibration
+  try {
+    const logs = JSON.parse(localStorage.getItem('tasmee_false_alarms') || '[]');
+    const errRec = wordErrors.find(e => e.index === targetIdx);
+    logs.push({ page: currentPage, idx: targetIdx, expected: currentWordList[targetIdx]?.t || '', heard: errRec?.spoken || '', ts: Date.now() });
+    if (logs.length > 200) logs.splice(0, logs.length - 200);
+    localStorage.setItem('tasmee_false_alarms', JSON.stringify(logs));
+  } catch (_) {}
+  // Clear red mark & mistake entry
+  try {
+    if (redMarks && redMarks[currentPage + ':' + targetIdx]) delete redMarks[currentPage + ':' + targetIdx];
+    localStorage.setItem('tasmee_red_marks', JSON.stringify(redMarks));
+  } catch (_) {}
+  sessionErrorKeys.delete(currentPage + ':' + targetIdx);
+  wordErrors = wordErrors.filter(e => e.index !== targetIdx);
+  wordStates[targetIdx] = 'ok';
+  markMistakeMastered(currentPage, targetIdx);
+  if (targetIdx === currentWordIndex) {
+    haltError = null;
+    haltAheadHits = 0;
+    const bar = document.getElementById('halt-alert-bar');
+    if (bar) bar.style.display = 'none';
+    currentWordIndex++;
+    advancePastPauseMarks();
+    syncPrimaryAnchor();
+    checkReplayResume();
+  }
+  updateMistakesCounterUI();
+  if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return; }
+  refreshActiveViewsAfterStep();
+  if (isReciting) resetSilenceHintTimer();
+}
+
+function triggerMistakeOnCurrentWord(spokenToken, errorType) {
   if (currentWordIndex >= currentWordList.length) return;
   clearTimeout(interimMistakeTimer);
   pendingMismatchFn = null;
   pendingMismatchMeta = null;
+  hideSilencePeekBar();
 
   const currentObj = currentWordList[currentWordIndex];
   const currentExpected = currentObj?.t || '';
-  const now = Date.now();
+  const errKind = errorType || 'wrong';
 
-  // 1. Mark word in RED ('wrong') and keep a permanent red mark on it
-  wordStates[currentWordIndex] = 'wrong';
+  // 1. Mark word ('wrong' or 'swap') and keep a red mark on it
+  wordStates[currentWordIndex] = errKind === 'swap' ? 'swap' : 'wrong';
   addRedMark(currentPage, currentWordIndex);
   sessionErrorKeys.add(currentPage + ':' + currentWordIndex);
 
@@ -6717,6 +6882,7 @@ function triggerMistakeOnCurrentWord(spokenToken) {
       index: currentWordIndex,
       expected: currentExpected,
       spoken: spokenToken || '',
+      type: errKind,
       ayah: currentObj?.a || 1,
       surah: currentObj?.s || 2
     });
@@ -6725,16 +6891,21 @@ function triggerMistakeOnCurrentWord(spokenToken) {
     recordUserMistake(currentObj, currentWordIndex, spokenToken);
   }
 
-  // 3. Ring loud alert bell & vibrate
+  // 3. Ring alert bell & vibrate
   ringErrorBellFor(currentPage, currentWordIndex);
 
   // 4. Handle Stop-on-Error vs Skip-Errors mode
   if (stopOnErrorMandatory) {
-    // Mode 1: Do NOT skip the mistake — stop at the wrong word, keep it marked RED, show alert bar, and count it in mistakes
-    haltError = { index: currentWordIndex, word: currentExpected, spoken: spokenToken };
+    haltError = { index: currentWordIndex, word: currentExpected, spoken: spokenToken, type: errKind };
     const bar = document.getElementById('halt-alert-bar');
     const nameEl = document.getElementById('halt-word-name');
+    const heardEl = document.getElementById('halt-heard-note');
     if (nameEl) nameEl.textContent = currentExpected;
+    if (heardEl) {
+      heardEl.textContent = errKind === 'swap'
+        ? ' (تبديل ترتيب)'
+        : (spokenToken ? ` (سُمع: ${spokenToken})` : '');
+    }
     if (bar) bar.style.display = 'flex';
     refreshActiveViewsAfterStep();
   } else {
@@ -6829,6 +7000,7 @@ async function startMicrophoneStream() {
         micSourceNode.connect(micAnalyser);
 
         isAudioInputActive = true;
+        detectMicDeviceType(micStream);
         startAudioLevelMonitor();
         return true;
       }
@@ -6862,11 +7034,28 @@ function stopMicrophoneStream() {
   updateMicVisualActivity(0);
 }
 
+let micDeviceWarning = '';
+let micNoiseFloor = 0;
+
+function detectMicDeviceType(stream) {
+  micDeviceWarning = '';
+  try {
+    const track = stream && stream.getAudioTracks && stream.getAudioTracks()[0];
+    const lbl = (track && track.label ? track.label : '').toLowerCase();
+    if (/bluetooth|hands[- ]?free|headset|airpods|buds|car|sco|hfp|bt\b/.test(lbl)) {
+      micDeviceWarning = '🎧 ميكروفون بلوتوث/سماعة — يُفضّل ميكروفون الهاتف مباشرة لدقة أعلى';
+      smartStatus(micDeviceWarning);
+    }
+  } catch (_) {}
+}
+
 function startAudioLevelMonitor() {
   if (!micAnalyser) return;
   const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
   let voiceBurstDuration = 0;
   let silenceDuration = 0;
+  let noiseSamples = [];
+  let noiseCalibrated = false;
 
   function checkLevel() {
     if (!isReciting || !isAudioInputActive) return;
@@ -6878,6 +7067,19 @@ function startAudioLevelMonitor() {
     const avg = sum / dataArray.length;
     currentAudioLevel = avg;
     updateMicVisualActivity(avg);
+
+    // Quick 1.5-second ambient noise (SNR) calibration at session start
+    if (!noiseCalibrated) {
+      noiseSamples.push(avg);
+      if (noiseSamples.length >= 60) {
+        noiseCalibrated = true;
+        noiseSamples.sort((a, b) => a - b);
+        micNoiseFloor = noiseSamples[Math.floor(noiseSamples.length * 0.25)] || 0;
+        if (micNoiseFloor >= 28 && !micDeviceWarning) {
+          smartStatus('🔊 ضوضاء محيطة مرتفعة — اقترب قليلاً من الميكروفون لدقة أفضل');
+        }
+      }
+    }
 
     // Voice Activity Detection (VAD) for Offline / Airplane Mode
     const VOICE_THRESHOLD = 14;
@@ -7083,6 +7285,7 @@ function startRecitation() {
     }
   };
 
+  resetSilenceHintTimer();
   try {
     recognitionEngine.start();
   } catch (_) {}
@@ -7094,6 +7297,7 @@ function stopRecitation() {
   if (isReciting && startLocked) { lastStopInfo = { page: currentPage, idx: currentWordIndex }; try { localStorage.setItem('tasmee_resume', JSON.stringify(lastStopInfo)); } catch (_) {} }
   isReciting = false;
   clearTimeout(interimMistakeTimer);
+  hideSilencePeekBar();
   btnRecite.classList.remove('recording');
   if (recognitionEngine) {
     try {
@@ -8087,6 +8291,7 @@ function processRecitedText(text, isFinal) {
   const rawTokens = normArabic(text).split(/\s+/).filter(Boolean);
   let tokens = normalizeTokenStream(rawTokens);
   if (!tokens.length) return;
+  if (isReciting) resetSilenceHintTimer();
 
   // Strip leading Isti'adhah ("أعوذ بالله من الشيطان الرجيم") and Basmalah ("بسم الله الرحمن الرحيم")
   // when they are not the actual words on the current page, so reciting them before an ayah never causes false matches or errors!
@@ -8262,8 +8467,16 @@ function processRecitedText(text, isFinal) {
     while (nextNextExpectedIdx < currentWordList.length && isQuranPauseMark(currentWordList[nextNextExpectedIdx]?.t)) nextNextExpectedIdx++;
     const nextNextExpected = currentWordList[nextNextExpectedIdx]?.t || '';
 
-    // ---- 1. the word is right (direct / compound / Muqatta'ah / split / STT alternative / verified slip) ----
+    // ---- 1. the word is right (direct / leading و-ف at ayah start / compound / Muqatta'ah / split / STT alternative / verified slip) ----
     let directTier = getWordMatchTier(token, currentExpected);
+    // Leading 'و' or 'ف' at Ayah start tolerance (PDF Sec 6.2 & 16.4: STT often drops initial و/ف when starting an ayah)
+    if (directTier === 0 && (currentWordIndex === 0 || !sameAyahIdx(currentWordIndex - 1, currentWordIndex))) {
+      const nb = normArabic(currentExpected).replace(/\s+/g, '');
+      if (nb.length >= 4 && (nb[0] === 'و' || nb[0] === 'ف')) {
+        const strippedTier = getWordMatchTier(token, nb.slice(1));
+        if (strippedTier > 0 && strippedTier <= 2) directTier = 2;
+      }
+    }
     // Anti-confusion guard: if token is only a Tier-3 fuzzy match for currentExpected,
     // but is a Tier-1 exact match for nextExpected (and reader omitted currentExpected), do NOT hide the omission!
     if (directTier === 3 && nextExpected && getWordMatchTier(token, nextExpected) === 1) {
@@ -8376,6 +8589,15 @@ function processRecitedText(text, isFinal) {
     if (stopOnErrorMandatory && haltError) {
       lastProcessedTokenCount = gi + 1;
       break;
+    }
+
+    // ---- 4b. Word-Order Swap Detection (تبديل ترتيب كلمتين متتاليتين: e.g. الرحيم الرحمن instead of الرحمن الرحيم) ----
+    if (nextToken && nextExpected && isWordMatch(token, nextExpected) && isWordMatch(nextToken, currentExpected)) {
+      lastProcessedTokenCount = gi + 2;
+      i++;
+      triggerMistakeOnCurrentWord(token + ' ' + nextToken, 'swap');
+      if (stopOnErrorMandatory) break;
+      continue;
     }
 
     // ---- 5. Omission detection (reader skipped currentExpected and spoke nextExpected) ----
