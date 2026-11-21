@@ -75,6 +75,8 @@ class _HomeState extends State<Home> {
   int _wavLoopEpoch = 0;
   int _pendingTranscribeJobs = 0;
   bool _offlineHeardAny = false;
+  bool _isTranscribingNow = false;
+  String _currentPromptHint = '';
   WhisperLiveSession? _whisperSession;
   StreamSubscription<String>? _whisperPartialSub;
   String? _locale;
@@ -456,6 +458,8 @@ class _HomeState extends State<Home> {
         );
       } else if (act == 'stop') {
         _stop();
+      } else if (act == 'hint') {
+        _currentPromptHint = (o['prompt']?.toString() ?? '').trim();
       } else if (act == 'vibrate_err') {
         HapticFeedback.mediumImpact();
       } else if (act == 'get_page') {
@@ -736,6 +740,7 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _transcribeWavSegmentAsync(String recordedPath, int myEpoch, double maxDb) async {
+    _isTranscribingNow = true;
     try {
       final f = File(recordedPath);
       if (!f.existsSync()) return;
@@ -754,10 +759,12 @@ class _HomeState extends State<Home> {
       if (!_offlineHeardAny) {
         _js('status', '⚙️ [5] جارٍ تحليل المقطع الصوتي (${sz ~/ 1024} KB) محليًا...');
       }
+      final hint = _currentPromptHint.isNotEmpty ? _currentPromptHint : null;
       final res = await _whisper.transcribe(
         model: WhisperModel.base,
         audioPath: recordedPath,
         lang: 'ar',
+        initialPrompt: hint,
         suppressNonSpeechTokens: false,
         keepModelLoaded: true,
         noContext: true,
@@ -778,6 +785,7 @@ class _HomeState extends State<Home> {
         _js('status', '⚠️ [6] خطأ في تحويل الصوت المحلي: $e');
       }
     } finally {
+      _isTranscribingNow = false;
       if (_pendingTranscribeJobs > 0) _pendingTranscribeJobs--;
     }
   }
@@ -799,9 +807,12 @@ class _HomeState extends State<Home> {
           ),
           path: wavPath,
         );
-        // Fast adaptive 1.08s segment (flushes early at ~0.54s on a short breath pause after voice!)
+        // Self-throttling zero-drop adaptive segment:
+        // - Minimum ~1.35s so Whisper has clean acoustic context (avoids garbled short-clip words)
+        // - Flushes early at ~0.95s on a breath pause if decoder is already idle
+        // - If previous decode is still busy, keeps recording smoothly (up to 2.5s) instead of DROPPING audio!
         bool heardVoiceInSeg = false;
-        for (int t = 0; t < 6; t++) {
+        for (int t = 0; t < 14; t++) {
           if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
           await Future.delayed(const Duration(milliseconds: 180));
           try {
@@ -810,16 +821,19 @@ class _HomeState extends State<Home> {
             if (amp.current > -40.0) heardVoiceInSeg = true;
             final normPct = ((amp.current + 55.0) * 1.9).clamp(0.0, 100.0).round();
             _js('level', normPct);
-            // Early flush when reader finishes a short phrase/breath after >= 0.54s
-            if (heardVoiceInSeg && t >= 2 && amp.current < -42.0) break;
+            // Once decoder is idle: flush at ~0.90s on breath pause, or at ~1.44s continuously
+            if (!_isTranscribingNow) {
+              if (heardVoiceInSeg && t >= 4 && amp.current < -42.0) break;
+              if (t >= 7) break;
+            }
           } catch (_) {}
         }
         final recordedPath = await _recorder.stop();
         if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
-        if (recordedPath != null && _pendingTranscribeJobs < 2) {
+        if (recordedPath != null) {
           final segDb = maxDb;
           _pendingTranscribeJobs++;
-          // Zero-gap pipeline with bounded queue (max 2 in flight) so latency NEVER accumulates over 60 min!
+          // Zero-drop sequential pipeline: EVERY recorded segment is decoded in order with ZERO dropped words!
           prevTranscribe = prevTranscribe.then((_) {
             if (_want && _chunkedModeActive && _wavLoopEpoch == myEpoch) {
               return _transcribeWavSegmentAsync(recordedPath, myEpoch, segDb);

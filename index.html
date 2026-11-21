@@ -8494,7 +8494,18 @@ function landOnWord(idx) {
 function doJump(idx) {
   const back = lastJumpBack || 0;
   const evStart = Math.max(currentWordIndex, idx - back);          // words that were really spoken just before idx
-  if (idx > currentWordIndex && !isFreshStart()) markSkippedAsMissed(currentWordIndex, evStart);
+  const gapLen = Math.max(0, evStart - currentWordIndex);
+  const isOfflineCatchUp = !!(typeof window !== 'undefined' && window.__isOfflineWhisperMode && gapLen >= 3);
+  if (idx > currentWordIndex && !isFreshStart()) {
+    if (isOfflineCatchUp) {
+      // Offline delayed-chunk catch-up: do NOT paint an entire 3+ word span red due to Whisper lag!
+      for (let k = currentWordIndex; k < evStart; k++) {
+        if (!isQuranPauseMark(currentWordList[k]?.t) && wordStates[k] === 'pending') wordStates[k] = 'ok';
+      }
+    } else {
+      markSkippedAsMissed(currentWordIndex, evStart);
+    }
+  }
   for (let k = evStart; k < idx; k++) {
     if (!isQuranPauseMark(currentWordList[k]?.t) && (wordStates[k] === 'pending' || wordStates[k] === 'missed')) wordStates[k] = 'ok';
   }
@@ -8533,10 +8544,19 @@ function isPartialOfExpected(token, expected) {
   return a.length >= 1 && a.length < b.length && (b.startsWith(a) || b.startsWith('ال' + a) || normSkeleton(expected).startsWith(normSkeleton(token)));
 }
 
+function pushOfflineLookaheadHint() {
+  if (!window.Tasmee || !isReciting || !startLocked || !currentWordList.length) return;
+  try {
+    const slice = currentWordList.slice(currentWordIndex, currentWordIndex + 10)
+      .map(w => w && w.t ? w.t : '').filter(Boolean).join(' ').slice(0, 140);
+    if (slice) Tasmee.postMessage(JSON.stringify({ a: 'hint', prompt: slice }));
+  } catch (_) {}
+}
 function refreshActiveViewsAfterStep() {
   if (isReciting && !isQuizModeActive && startLocked && currentWordList[currentWordIndex]) {
     const cw = currentWordList[currentWordIndex];
     selectedAyahInfo = { surah: cw.s || (currentPage === 62 ? 3 : 2), ayah: cw.a };
+    pushOfflineLookaheadHint();
   }
   renderCurrentPage();
   autoScrollToCurrentWord(false);
@@ -9005,7 +9025,11 @@ function processRecitedText(text, isFinal) {
       }
     }
 
-    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token when nextToken is the exact expected word!) ----
+    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token or <=2-letter noise fragment!) ----
+    if (isDelta && normArabic(token).replace(/\s+/g, '').length <= 2 && !isWordMatch(token, currentExpected)) {
+      lastProcessedTokenCount = gi + 1;
+      continue;
+    }
     if (isDelta && nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
       lastProcessedTokenCount = gi + 1;
       continue;
