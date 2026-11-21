@@ -60,6 +60,7 @@ class _HomeState extends State<Home> {
   bool _usingOnDeviceStt = false;
   bool _onDeviceGotResult = false;
   bool _onDeviceFallbackTriggered = false;
+  bool _onDeviceSttUnavailable = false;
   String? _extractedModelPath;
   Future<String?>? _modelExtractFuture;
   Map<int, List<Map<String, dynamic>>>? _bundledPages;
@@ -530,6 +531,7 @@ class _HomeState extends State<Home> {
   Future<void> _fallbackFromOnDeviceToWhisper(String? promptHint) async {
     if (!_want || _onDeviceFallbackTriggered) return;
     _onDeviceFallbackTriggered = true;
+    _onDeviceSttUnavailable = true;
     _usingOnDeviceStt = false;
     _endTimer?.cancel();
     try { await _stt.stop(); } catch (_) {}
@@ -566,8 +568,8 @@ class _HomeState extends State<Home> {
         return;
       }
     } else {
-      // Offline Tier 1: Try instant hardware-accelerated On-Device OS Streaming first (~150-250ms)
-      if (await _ensureSttInitialized()) {
+      // Offline Tier 1: Try instant hardware-accelerated On-Device OS Streaming first (~150-250ms), skip if already known unavailable on this phone
+      if (!_onDeviceSttUnavailable && await _ensureSttInitialized()) {
         _usingOfflineWhisper = false;
         _usingOnDeviceStt = true;
         _js('status', '⚡ التسميع المحلي الفوري (نواة الجهاز) نشط بدون إنترنت — اقرأ الآن');
@@ -687,7 +689,7 @@ class _HomeState extends State<Home> {
         }
         // Self-healing watchdog: if 3.5s of real voice produced 0 live partials (e.g. strict native gate),
         // seamlessly switch to deterministic Chunked-WAV local transcription!
-        if (!switchedToChunked && _want && _livePartialsCount == 0 && _speechActiveMs >= 3500) {
+        if (!switchedToChunked && _want && _livePartialsCount == 0 && _speechActiveMs >= 1600) {
           switchedToChunked = true;
           Future.microtask(() => _switchToOfflineWhisperChunked());
         }
@@ -709,7 +711,7 @@ class _HomeState extends State<Home> {
       _whisperSession = session;
       _js('status', '🎙️ التسميع المحلي جاهز بدون إنترنت — اقرأ من أي موضع في الصفحة');
       _liveWatchdogTimer?.cancel();
-      _liveWatchdogTimer = Timer(const Duration(milliseconds: 3000), () {
+      _liveWatchdogTimer = Timer(const Duration(milliseconds: 1500), () {
         if (_want && !_chunkedModeActive && _livePartialsCount == 0) {
           _switchToOfflineWhisperChunked();
         }
@@ -855,19 +857,19 @@ class _HomeState extends State<Home> {
         // - Flushes early at ~0.95s on a breath pause if decoder is already idle
         // - If previous decode is still busy, keeps recording smoothly (up to 2.5s) instead of DROPPING audio!
         bool heardVoiceInSeg = false;
-        for (int t = 0; t < 14; t++) {
+        for (int t = 0; t < 16; t++) {
           if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
-          await Future.delayed(const Duration(milliseconds: 180));
+          await Future.delayed(const Duration(milliseconds: 120));
           try {
             final amp = await _recorder.getAmplitude();
             if (amp.current > maxDb) maxDb = amp.current;
             if (amp.current > -40.0) heardVoiceInSeg = true;
             final normPct = ((amp.current + 55.0) * 1.9).clamp(0.0, 100.0).round();
             _js('level', normPct);
-            // Once decoder is idle: flush at ~0.90s on breath pause, or at ~1.44s continuously
+            // Fast low-latency flush once decoder is idle: ~360ms on breath pause, ~600ms continuous
             if (!_isTranscribingNow) {
-              if (heardVoiceInSeg && t >= 3 && amp.current < -42.0) break;
-              if (t >= 5) break;
+              if (heardVoiceInSeg && t >= 2 && amp.current < -42.0) break;
+              if (t >= 4) break;
             }
           } catch (_) {}
         }

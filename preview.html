@@ -2063,6 +2063,14 @@ html[data-theme="light"] .w.pos-marker::after {
   color: #0e6953;
 }
 
+/* Highlight active Ayah softly + active Word prominently during recitation */
+.w.ayah-cur {
+  background: rgba(52, 211, 153, 0.08);
+  border-radius: 3px;
+}
+html[data-theme="light"] .w.ayah-cur {
+  background: rgba(16, 185, 129, 0.09);
+}
 /* Highlight halo during active recitation (Authentic Mushaf Reading Pointer) */
 .w.cur {
   background: linear-gradient(180deg, rgba(52, 211, 153, 0.14) 0%, rgba(52, 211, 153, 0.30) 100%) !important;
@@ -6508,7 +6516,9 @@ function buildMushafWordsBodyHTML(words, options) {
       const showCur = j === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError);
       const showPos = j === currentWordIndex && !showCur;
       const styleAttr = `${qcfStyle}${isHidden ? 'filter: blur(5px); opacity: 0.3;' : ''}`;
-      chunk += `<span class="w${qcfCls} ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}"${styleAttr ? ` style="${styleAttr}"` : ''}>${wordHtml}</span>`;
+      const _curObj = (isReciting && (startLocked || manualWordSelected || haltError) && currentWordList[currentWordIndex]) ? currentWordList[currentWordIndex] : null;
+      const inCurAyah = !!(_curObj && w.s === _curObj.s && w.a === _curObj.a);
+      chunk += `<span class="w${qcfCls} ${wordStates[j]}${hasRedMark(currentPage, j) ? ' errmark' : ''}${showPos ? ' pos-marker' : ''}${inCurAyah ? ' ayah-cur' : ''} ${showCur ? 'cur' + (haltError ? ' halt' : '') : ''}" data-j="${j}"${styleAttr ? ` style="${styleAttr}"` : ''}>${wordHtml}</span>`;
       if (w.end) {
         chunk += `<span class="${badgeCls}" data-ayah-s="${sNum}" data-ayah-a="${w.a}" onclick="selectAyahOnPage(${sNum}, ${w.a})">${mushafAyahMedallionInner(w.a)}</span>`;
       }
@@ -7635,7 +7645,7 @@ function autoScrollToCurrentWord(force) {
   const vRect = viewport.getBoundingClientRect();
 
   if (force || rect.top < vRect.top + 70 || rect.bottom > vRect.bottom - 130) {
-    currentEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    currentEl.scrollIntoView({ block: 'center', behavior: isReciting ? 'auto' : 'smooth' });
   }
 }
 
@@ -7810,7 +7820,7 @@ function getWordMatchTier(spokenToken, expectedWord) {
     if (bestD <= 0.85) return 3;
   } else {
     // 5+ letter words: allow proportional close phonetic / Madd / STT tolerance while rejecting different words
-    if (bestD <= 1.65 && (bestD / maxLen) <= 0.22) return 3;
+    if (bestD <= 1.85 && (bestD / maxLen) <= 0.25) return 3;
   }
 
   return 0;
@@ -8563,13 +8573,16 @@ function refreshActiveViewsAfterStep() {
   // Instant <1ms in-place DOM class update when page words are already rendered (avoids rebuilding 130+ spans on every word!)
   const existingSpans = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') ? document.querySelectorAll('#mushaf-content-area .w[data-j]') : [];
   if (existingSpans.length === currentWordList.length && existingSpans.length > 0 && !isQuizModeActive) {
+    const _curAyahObj = (isReciting && (startLocked || manualWordSelected || haltError) && currentWordList[currentWordIndex]) ? currentWordList[currentWordIndex] : null;
     for (let k = 0; k < existingSpans.length; k++) {
       const el = existingSpans[k];
       const st = wordStates[k] || 'pending';
+      const _cwItem = currentWordList[k];
       el.classList.toggle('ok', st === 'ok');
       el.classList.toggle('wrong', st === 'wrong');
       el.classList.toggle('missed', st === 'missed');
       el.classList.toggle('peeked', st === 'peeked');
+      el.classList.toggle('ayah-cur', !!(_curAyahObj && _cwItem && _cwItem.s === _curAyahObj.s && _cwItem.a === _curAyahObj.a));
       el.classList.toggle('cur', k === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError));
       if (isHidingWords) {
         const rev = (st === 'ok' || st === 'wrong' || st === 'missed' || st === 'peeked');
@@ -9098,6 +9111,10 @@ function processRecitedText(text, isFinal) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }
+    if (isOfflineGuard && currentWordIndex > 0 && wordStates[currentWordIndex - 1] === 'ok' && isSuffixOfWord(token, currentWordList[currentWordIndex - 1]?.t || '')) {
+      lastProcessedTokenCount = gi + 1;
+      continue;
+    }
     if (nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
       lastProcessedTokenCount = gi + 1;
       continue;
@@ -9113,7 +9130,7 @@ function processRecitedText(text, isFinal) {
       lastProcessedTokenCount = gi + 1;
       break;
     }
-    const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= 2);
+    const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= (isOfflineGuard ? 3 : 2));
     if (stable) {
       lastProcessedTokenCount = gi + 1;
       triggerMistakeOnCurrentWord(token);
