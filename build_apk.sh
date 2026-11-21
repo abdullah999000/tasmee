@@ -62,15 +62,25 @@ echo "Building Release APK with applicationId=com.tasmee.tasmee versionCode=$BUI
 flutter build apk --release --build-number="$BUILD_NUM"
 cp build/app/outputs/flutter-apk/app-release.apk ../tasmee.apk
 
-# Cryptographic verification: confirm APK is signed with the fixed tasmee-release.jks certificate
+# Cryptographic verification using Android SDK apksigner (reads v1/v2/v3/v4 signatures; keytool -jarfile only reads v1!)
 EXPECTED_SHA256="4F:1F:F8:1D:1F:F9:7D:1B:AA:4A:64:2F:ED:88:C9:EA:3E:13:C3:A6:1F:0B:CD:FE:8D:4F:AB:8E:1A:8E:FD:70"
-if command -v keytool >/dev/null 2>&1; then
-  ACTUAL_CERT="$(keytool -printcert -jarfile ../tasmee.apk 2>/dev/null || true)"
-  echo "$ACTUAL_CERT" | grep -E "Owner:|SHA256:" || true
-  if ! echo "$ACTUAL_CERT" | grep -q "$EXPECTED_SHA256"; then
-    echo "ERROR: APK was NOT signed with fixed release certificate ($EXPECTED_SHA256)!" >&2
-    exit 1
+EXPECTED_SHA256_HEX="4f1ff81d1ff97d1baa4a642fed88c9ea3e13c3a61f0bcdfe8d4fab8e1a8efd70"
+APKSIGNER="$(command -v apksigner || ls -1 "$SDK_ROOT"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n 1 || true)"
+if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
+  CERT_OUT="$("$APKSIGNER" verify --print-certs ../tasmee.apk 2>&1 || true)"
+  echo "$CERT_OUT"
+  if ! echo "$CERT_OUT" | tr '[:upper:]' '[:lower:]' | tr -d ':' | grep -q "$EXPECTED_SHA256_HEX"; then
+    echo "Re-signing APK directly with fixed tasmee-release.jks via apksigner..."
+    "$APKSIGNER" sign --ks android/app/tasmee-release.jks --ks-key-alias tasmee --ks-pass pass:tasmee_release_2026 --key-pass pass:tasmee_release_2026 ../tasmee.apk
+    CERT_OUT="$("$APKSIGNER" verify --print-certs ../tasmee.apk 2>&1)"
+    echo "$CERT_OUT"
+    if ! echo "$CERT_OUT" | tr '[:upper:]' '[:lower:]' | tr -d ':' | grep -q "$EXPECTED_SHA256_HEX"; then
+      echo "ERROR: APK signature verification failed after apksigner sign!" >&2
+      exit 1
+    fi
   fi
-  echo "Verified fixed release signature SHA-256: $EXPECTED_SHA256"
+  echo "Verified fixed release signature SHA-256 (v2/v3): $EXPECTED_SHA256"
+else
+  echo "WARNING: apksigner not found on runner; skipping v2 signature print."
 fi
 echo "Done: $(cd .. && pwd)/tasmee.apk"

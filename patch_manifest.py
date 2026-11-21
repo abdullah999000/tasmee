@@ -82,11 +82,13 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
                 changed = True
                 print(f"{fname} patched (disabled release lint crash + noCompress bin)")
 
-        # Enforce minSdk = 24 for whisper_ggml compatibility
+        # Enforce minSdk = 24 and ndkVersion = "29.0.13113456" for whisper_ggml compatibility
         if is_kts:
             g_min = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24', g)
+            g_min = re.sub(r'ndkVersion\s*=\s*flutter\.ndkVersion', 'ndkVersion = "29.0.13113456"', g_min)
         else:
             g_min = re.sub(r'minSdk(?:Version)?\s+flutter\.minSdkVersion', 'minSdkVersion 24', g)
+            g_min = re.sub(r'ndkVersion\s+flutter\.ndkVersion', 'ndkVersion "29.0.13113456"', g_min)
         if g_min != g:
             g = g_min
             changed = True
