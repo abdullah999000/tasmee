@@ -4866,8 +4866,10 @@ if (window.Tasmee) {
       const txt = typeof data === 'string' ? data : ((data && (data.text || data.transcript)) || '');
       const isFin = typeof data === 'object' && data !== null ? !!(data.final ?? data.isFinal ?? false) : false;
       window.__offlineDeltaEvent = !!(typeof data === 'object' && data !== null && data.offlineDelta);
-      if (window.__offlineDeltaEvent) {
+      if (window.__offlineDeltaEvent || (typeof data === 'object' && data !== null && data.offlineWhisper)) {
         window.__isOfflineWhisperMode = true;
+      } else if (typeof data === 'object' && data !== null && data.onDeviceStt) {
+        window.__isOfflineWhisperMode = false;
       }
       const it = [{ transcript: txt }];
       if (data && Array.isArray(data.alts)) {
@@ -8559,7 +8561,7 @@ function refreshActiveViewsAfterStep() {
     pushOfflineLookaheadHint();
   }
   // Instant <1ms in-place DOM class update when page words are already rendered (avoids rebuilding 130+ spans on every word!)
-  const existingSpans = document.querySelectorAll('#mushaf-content-area .w[data-j]');
+  const existingSpans = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') ? document.querySelectorAll('#mushaf-content-area .w[data-j]') : [];
   if (existingSpans.length === currentWordList.length && existingSpans.length > 0 && !isQuizModeActive) {
     for (let k = 0; k < existingSpans.length; k++) {
       const el = existingSpans[k];
@@ -9045,12 +9047,15 @@ function processRecitedText(text, isFinal) {
       }
     }
 
-    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token or <=2-letter noise fragment!) ----
-    if (isDelta && normArabic(token).replace(/\s+/g, '').length <= 2 && !isWordMatch(token, currentExpected)) {
+    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token or <=2-letter truncated fragment like "لي" for "لَعِبٌ"!) ----
+    const isOfflineGuard = isDelta || (typeof window !== 'undefined' && window.__isOfflineWhisperMode);
+    const normTokLen = normArabic(token).replace(/\s+/g, '').length;
+    const normExpLen = normArabic(currentExpected).replace(/\s+/g, '').length;
+    if (isOfflineGuard && normTokLen <= 2 && normExpLen >= 3 && !isWordMatch(token, currentExpected)) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }
-    if (isDelta && nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
+    if (isOfflineGuard && nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }

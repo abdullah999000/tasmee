@@ -57,6 +57,9 @@ class _HomeState extends State<Home> {
   bool _sttReady = false;
   bool _want = false;
   bool _usingOfflineWhisper = false;
+  bool _usingOnDeviceStt = false;
+  bool _onDeviceGotResult = false;
+  bool _onDeviceFallbackTriggered = false;
   String? _extractedModelPath;
   Future<String?>? _modelExtractFuture;
   Map<int, List<Map<String, dynamic>>>? _bundledPages;
@@ -497,23 +500,15 @@ class _HomeState extends State<Home> {
       }
     } else {
       try { await _stt.stop(); } catch (_) {}
-      await _listenStt();
+      await _listenStt(onDevice: _usingOnDeviceStt);
     }
   }
 
-  Future<void> _start({String? promptHint, bool preferOffline = false}) async {
-    _want = true;
-    _js('status', '⏳ [2] جارٍ فحص الاتصال وتجهيز المحرك...');
-    final online = !preferOffline && await _hasInternetConnection();
-
-    // Unified ASR Routing:
-    // - Online: fast OS/Cloud SpeechRecognition (with automatic fallback to local Whisper if unavailable)
-    // - Offline: 100% On-Device Bundled Whisper GGML (ggml-base-q5_1.bin) feeding the EXACT SAME tracking engine
-    if (online) {
-      _usingOfflineWhisper = false;
-      if (!_sttReady) {
-        _sttReady = await _stt.initialize(onStatus: _onStatus, onError: _onError);
-        if (_sttReady) {
+  Future<bool> _ensureSttInitialized() async {
+    if (!_sttReady) {
+      _sttReady = await _stt.initialize(onStatus: _onStatus, onError: _onError);
+      if (_sttReady) {
+        try {
           final locales = await _stt.locales();
           for (final l in locales) {
             if (l.localeId.toLowerCase().replaceAll('-', '_') == 'ar_sa') {
@@ -525,16 +520,64 @@ class _HomeState extends State<Home> {
               .where((l) => l.localeId.toLowerCase().startsWith('ar'))
               .map((l) => l.localeId)
               .firstOrNull;
-        }
+        } catch (_) {}
+        _locale ??= 'ar_SA';
       }
-      if (_sttReady) {
+    }
+    return _sttReady;
+  }
+
+  Future<void> _fallbackFromOnDeviceToWhisper(String? promptHint) async {
+    if (!_want || _onDeviceFallbackTriggered) return;
+    _onDeviceFallbackTriggered = true;
+    _usingOnDeviceStt = false;
+    _endTimer?.cancel();
+    try { await _stt.stop(); } catch (_) {}
+    _js('status', '🎙️ التبديل التلقائي لمحرك Whisper المحلي (للسرعة اللحظية ثبّت حزمة العربية الأوفلاين من إعدادات Google)');
+    final modelPath = await _prepareBundledWhisperModel();
+    if (modelPath != null && _want) {
+      final started = await _startOfflineWhisperLive(modelPath, promptHint);
+      if (started) return;
+    }
+    if (_want) {
+      _want = false;
+      _js('error', 'not-allowed');
+    }
+  }
+
+  Future<void> _start({String? promptHint, bool preferOffline = false}) async {
+    _want = true;
+    _currentPromptHint = (promptHint ?? '').trim();
+    _onDeviceFallbackTriggered = false;
+    _onDeviceGotResult = false;
+    _js('status', '⏳ [2] جارٍ فحص الاتصال وتجهيز المحرك...');
+    final online = !preferOffline && await _hasInternetConnection();
+
+    // Unified ASR Routing:
+    // - Online: fast OS/Cloud SpeechRecognition (with automatic fallback to local Whisper if unavailable)
+    // - Offline Tier 1: True <250ms On-Device OS Streaming ASR (onDevice: true) when offline Arabic pack is installed
+    // - Offline Tier 2: 100% Standalone Bundled Whisper Tiny Quran GGML automatic fallback
+    if (online) {
+      _usingOfflineWhisper = false;
+      _usingOnDeviceStt = false;
+      if (await _ensureSttInitialized()) {
         _js('status', '🌐 التسميع المتصل يعمل — اقرأ من أي موضع في الصفحة');
-        await _listenStt();
+        await _listenStt(onDevice: false);
         return;
+      }
+    } else {
+      // Offline Tier 1: Try instant hardware-accelerated On-Device OS Streaming first (~150-250ms)
+      if (await _ensureSttInitialized()) {
+        _usingOfflineWhisper = false;
+        _usingOnDeviceStt = true;
+        _js('status', '⚡ التسميع المحلي الفوري (نواة الجهاز) نشط بدون إنترنت — اقرأ الآن');
+        final ok = await _listenStt(onDevice: true);
+        if (ok) return;
+        _usingOnDeviceStt = false;
       }
     }
 
-    // Offline (or OS STT unavailable): 100% On-Device Bundled Whisper GGML (Direct File-Based WAV Loop)
+    // Offline Tier 2 (or OS STT unavailable): 100% On-Device Bundled Whisper Tiny Quran GGML
     _js('status', '⏳ [3] جارٍ تجهيز نموذج التسميع المحلي...');
     final modelPath = await _prepareBundledWhisperModel();
     if (modelPath != null) {
@@ -676,7 +719,7 @@ class _HomeState extends State<Home> {
         final clean = _cleanWhisperText(text);
         if (clean.isNotEmpty) {
           _livePartialsCount++;
-          _js('result', {'text': clean, 'final': false});
+          _js('result', {'text': clean, 'final': false, 'offlineWhisper': true});
         }
       }, onError: (Object err) {
         if (_want && !_chunkedModeActive) {
@@ -874,31 +917,55 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> _listenStt() async {
-    if (!_want || _stt.isListening) return;
+  Future<bool> _listenStt({bool onDevice = false}) async {
+    if (!_want) return false;
+    if (_stt.isListening) return true;
     try {
       await _stt.listen(
-        onResult: (r) => _js('result', {
-          'text': r.recognizedWords,
-          'final': r.finalResult,
-          'alts': r.alternates.map((a) => a.recognizedWords).toList(),
-        }),
+        onResult: (r) {
+          if (onDevice && r.recognizedWords.trim().isNotEmpty) {
+            _onDeviceGotResult = true;
+          }
+          _js('result', {
+            'text': r.recognizedWords,
+            'final': r.finalResult,
+            'alts': r.alternates.map((a) => a.recognizedWords).toList(),
+            'onDeviceStt': onDevice,
+          });
+        },
+        onSoundLevelChange: (lvl) {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (nowMs - _lastLevelEmitMs >= 180) {
+            _lastLevelEmitMs = nowMs;
+            final pct = ((lvl + 2.0) * 10.0).clamp(0.0, 100.0).round();
+            _js('level', pct);
+          }
+        },
         localeId: _locale,
         listenFor: const Duration(minutes: 10),
         pauseFor: const Duration(seconds: 10),
         listenOptions: SpeechListenOptions(
+          onDevice: onDevice,
           partialResults: true,
           cancelOnError: false,
           listenMode: ListenMode.dictation,
         ),
       );
+      return true;
     } catch (_) {
+      if (onDevice && !_onDeviceFallbackTriggered) {
+        Future.microtask(() => _fallbackFromOnDeviceToWhisper(_currentPromptHint));
+        return false;
+      }
       _scheduleEnd();
+      return false;
     }
   }
 
   Future<void> _stop() async {
     _want = false;
+    _usingOnDeviceStt = false;
+    _onDeviceFallbackTriggered = false;
     _endTimer?.cancel();
     if (_usingOfflineWhisper || _whisperSession != null) {
       await _stopOfflineWhisperLive(emitFinal: false);
@@ -912,7 +979,7 @@ class _HomeState extends State<Home> {
   void _scheduleEnd() {
     _endTimer?.cancel();
     _endTimer = Timer(const Duration(milliseconds: 350), () {
-      if (_want) _js('end', null);
+      if (_want && !_usingOfflineWhisper) _js('end', null);
     });
   }
 
@@ -924,10 +991,20 @@ class _HomeState extends State<Home> {
 
   void _onError(dynamic e) {
     if (_usingOfflineWhisper) return;
-    final msg = (e.errorMsg ?? '').toString();
+    final msg = (e.errorMsg ?? '').toString().toLowerCase();
     if (msg.contains('permission')) {
       _want = false;
       _js('error', 'not-allowed');
+    } else if (_usingOnDeviceStt &&
+        (msg.contains('network') ||
+            msg.contains('language') ||
+            msg.contains('unavailable') ||
+            msg.contains('client') ||
+            msg.contains('server') ||
+            msg.contains('busy') ||
+            msg.contains('not_available'))) {
+      // Offline Arabic pack not installed or on-device recognizer unavailable -> seamless Whisper fallback!
+      Future.microtask(() => _fallbackFromOnDeviceToWhisper(_currentPromptHint));
     } else if (msg.contains('language')) {
       _want = false;
       _js('error', 'language-not-supported');
