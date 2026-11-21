@@ -8330,19 +8330,40 @@ function detectReplayTarget(prevToken, token, nextToken, allowSingle) {
   }
   if (bestMulti >= 0) return bestMulti;
 
-  // 2. Restarting from the FIRST word of the current ayah (most common recall habit!)
-  if (cur > curAyahStart && live(curAyahStart) && isWordMatch(token, currentWordList[curAyahStart].t)) {
+  // Helper: match word including optional dropped leading و/ف at ayah start
+  const matchAyahStartWord = (tok, exp) => {
+    if (isWordMatch(tok, exp)) return true;
+    const nb = normArabic(exp).replace(/\s+/g, '');
+    if (nb.length >= 4 && (nb[0] === 'و' || nb[0] === 'ف')) {
+      return isWordMatch(tok, nb.slice(1));
+    }
+    return false;
+  };
+
+  // Compute start of the immediately preceding ayah (for recalling what comes next after finishing an ayah!)
+  const prevAyahStart = curAyahStart > floor ? ayahStartOf(curAyahStart - 1) : curAyahStart;
+
+  // 2. Restarting from the FIRST word of the current ayah OR the immediately previous ayah (even if short particle!)
+  if (cur > curAyahStart && live(curAyahStart) && matchAyahStartWord(token, currentWordList[curAyahStart].t)) {
     return curAyahStart;
   }
+  if (prevAyahStart < curAyahStart && live(prevAyahStart) && matchAyahStartWord(token, currentWordList[prevAyahStart].t)) {
+    return prevAyahStart;
+  }
 
-  // 3. Running start from a recent word (last 8 words) in the current or previous ayah
+  // 3. Running start from ANY word in the current ayah or immediately previous ayah (up to 24 words back)
+  const recentFloor = Math.max(floor, Math.min(prevAyahStart, cur - 24));
   if (tokLen >= 3 && !SHORT_PARTICLES.has(normTok)) {
-    const recentFloor = Math.max(floor, cur - 8);
     for (let k = cur - 1; k >= recentFloor; k--) {
       if (!live(k)) continue;
       if (!SHORT_PARTICLES.has(normArabic(currentWordList[k].t)) && isWordMatch(token, currentWordList[k].t)) {
         return k;
       }
+    }
+  } else if (!allowSingle) {
+    // Short particle (ما/لا/ان/من/في/...) that exists earlier in current/previous ayah: wait 1 word before declaring an error!
+    for (let k = cur - 1; k >= recentFloor; k--) {
+      if (live(k) && isWordMatch(token, currentWordList[k].t)) return -2;
     }
   }
 

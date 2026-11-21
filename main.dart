@@ -790,15 +790,19 @@ class _HomeState extends State<Home> {
           ),
           path: wavPath,
         );
-        // Record 2.6-second segment while measuring peak amplitude & animating mic pulse
-        for (int t = 0; t < 10; t++) {
+        // Fast adaptive 1.26s segment (flushes early at ~0.72s on a short breath pause after voice!)
+        bool heardVoiceInSeg = false;
+        for (int t = 0; t < 7; t++) {
           if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
-          await Future.delayed(const Duration(milliseconds: 260));
+          await Future.delayed(const Duration(milliseconds: 180));
           try {
             final amp = await _recorder.getAmplitude();
             if (amp.current > maxDb) maxDb = amp.current;
+            if (amp.current > -40.0) heardVoiceInSeg = true;
             final normPct = ((amp.current + 55.0) * 1.9).clamp(0.0, 100.0).round();
             _js('level', normPct);
+            // Early flush when reader finishes a short phrase/breath after >= 0.72s
+            if (heardVoiceInSeg && t >= 3 && amp.current < -42.0) break;
           } catch (_) {}
         }
         final recordedPath = await _recorder.stop();
