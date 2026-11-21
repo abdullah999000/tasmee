@@ -4071,7 +4071,7 @@ html[data-theme="light"] #tasmee-exit-toast {
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>⏸ التوقف الإجباري عند الخطأ حتى تصحيحه</span>
-          <input type="checkbox" id="cfg-stop-on-error" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="if(stopOnErrorMandatory !== this.checked) toggleStopOnErrorMode();">
+          <input type="checkbox" id="cfg-stop-on-error" style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="if(stopOnErrorMandatory !== this.checked) toggleStopOnErrorMode();">
         </label>
         <button onclick="playBellAlert('err'); triggerErrorVibration();" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;font-family:inherit;font-weight:700;cursor:pointer;">
           🔊 تجربة صوت الجرس العالي والاهتزاز الآن
@@ -5747,7 +5747,7 @@ let isReciting = false;
 let isHidingWords = false;
 let isAudioPlaying = false;
 let audioPlayer = null;
-let stopOnErrorMandatory = true; // true: halts at error and requires correction; false: marks error and continues seamlessly
+let stopOnErrorMandatory = false; // PDF Sec 11 & 12.1: continuous flow by default; user can toggle strict halt anytime
 try {
   const _savedStop = localStorage.getItem('tasmee_stop_on_error');
   if (_savedStop !== null) stopOnErrorMandatory = (_savedStop === '1');
@@ -7168,7 +7168,7 @@ function triggerMistakeOnCurrentWord(spokenToken, errorType) {
 
   const currentObj = currentWordList[currentWordIndex];
   const currentExpected = currentObj?.t || '';
-  const errKind = errorType || 'wrong';
+  const errKind = errorType || (spokenToken ? 'substitution' : 'omission');
 
   // 1. Mark word ('wrong' or 'swap') and keep a red mark on it
   wordStates[currentWordIndex] = errKind === 'swap' ? 'swap' : 'wrong';
@@ -7806,8 +7806,8 @@ function getWordMatchTier(spokenToken, expectedWord) {
     // 3-letter words: allow at most ONE close Makhraj pair (e.g. س/ص، ت/ط، ذ/ز، ث/س، ح/ه، ه/ت)
     if (bestD <= 0.40) return 3;
   } else if (maxLen === 4) {
-    // 4-letter words: allow up to ~2 close phonetic pairs or 1 pair + 1 vowel/Madd difference
-    if (bestD <= 0.75) return 3;
+    // 4-letter words: allow up to 2 close phonetic pairs or 1 pair + 1 vowel/Madd difference
+    if (bestD <= 0.85) return 3;
   } else {
     // 5+ letter words: allow proportional close phonetic / Madd / STT tolerance while rejecting different words
     if (bestD <= 1.65 && (bestD / maxLen) <= 0.22) return 3;
@@ -9021,7 +9021,7 @@ function processRecitedText(text, isFinal) {
       continue;
     }
 
-    // ---- 5. Omission detection (reader skipped currentExpected and spoke nextExpected) ----
+    // ---- 5. Omission & Windowed Realignment (PDF Sec 13.2.3 & 13.2.6: never cascade errors when 1-2 words are skipped or dropped!) ----
     const nextLooksOmitted = !!(nextExpected && isWordMatch(token, nextExpected));
     const omissionConfirmed = nextLooksOmitted && (
       isFinal ||
@@ -9030,7 +9030,7 @@ function processRecitedText(text, isFinal) {
     if (!stopOnErrorMandatory && nextLooksOmitted) {
       if (omissionConfirmed) {
         lastProcessedTokenCount = startIdx + i + 1;
-        triggerMistakeOnCurrentWord(token);
+        triggerMistakeOnCurrentWord('', 'omission');
         if (currentWordIndex === nextExpectedIdx) {
           wordStates[currentWordIndex] = 'ok';
           currentWordIndex++;
@@ -9047,7 +9047,50 @@ function processRecitedText(text, isFinal) {
       }
     }
 
-    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token or <=2-letter truncated fragment like "لي" for "لَعِبٌ"!) ----
+    // Windowed lookahead alignment [currentWordIndex + 1 .. currentWordIndex + 8] when 2+ consecutive spoken words match ahead
+    if (!stopOnErrorMandatory && nextToken) {
+      let realignIdx = -1;
+      const winLim = Math.min(currentWordList.length - 1, currentWordIndex + 8);
+      for (let wk = currentWordIndex + 1; wk <= winLim; wk++) {
+        if (isQuranPauseMark(currentWordList[wk]?.t)) continue;
+        if (!isWordMatch(token, currentWordList[wk].t)) continue;
+        let wnx = wk + 1;
+        while (wnx < currentWordList.length && isQuranPauseMark(currentWordList[wnx]?.t)) wnx++;
+        if (wnx < currentWordList.length && isWordMatch(nextToken, currentWordList[wnx].t)) {
+          realignIdx = wk;
+          break;
+        }
+      }
+      if (realignIdx >= 0) {
+        lastProcessedTokenCount = gi + 1;
+        const skippedCount = realignIdx - currentWordIndex;
+        const isLagCatchUp = !!(typeof window !== 'undefined' && window.__isOfflineWhisperMode && skippedCount >= 3);
+        for (let sk = currentWordIndex; sk < realignIdx; sk++) {
+          if (isQuranPauseMark(currentWordList[sk]?.t)) continue;
+          if (isLagCatchUp) {
+            if (wordStates[sk] === 'pending') wordStates[sk] = 'ok';
+          } else {
+            currentWordIndex = sk;
+            triggerMistakeOnCurrentWord('', 'omission');
+          }
+        }
+        currentWordIndex = realignIdx;
+        landOnWord(realignIdx);
+        continue;
+      }
+    }
+
+    // Instant 3+ consecutive word auto-reposition anywhere on the page if cursor lost track (PDF Sec 13.2.6)
+    if (!stopOnErrorMandatory && nextToken && nextNextToken) {
+      const autoJump = findJumpIndex(prevToken, token, nextToken, nextNextToken, prevPrevToken, false);
+      if (autoJump >= 0) {
+        lastProcessedTokenCount = gi + 1;
+        doJump(autoJump);
+        continue;
+      }
+    }
+
+    // ---- 5b. Stray boundary / truncated fragment & insertion guard ----
     const isOfflineGuard = isDelta || (typeof window !== 'undefined' && window.__isOfflineWhisperMode);
     const normTokLen = normArabic(token).replace(/\s+/g, '').length;
     const normExpLen = normArabic(currentExpected).replace(/\s+/g, '').length;
@@ -9055,7 +9098,7 @@ function processRecitedText(text, isFinal) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }
-    if (isOfflineGuard && nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
+    if (nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
       lastProcessedTokenCount = gi + 1;
       continue;
     }
