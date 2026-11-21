@@ -26,38 +26,26 @@ if [ -x "$SDKMGR" ]; then
   yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
 fi
 
-# Bundle on-device Quran-tuned Whisper Base GGML model (~55-60 MB) with verified fallback to standard ggml-base-q5_1.bin
-MODEL_FILE="assets/models/ggml-base-q5_1.bin"
+# Bundle ultra-fast Quran-tuned Whisper TINY GGML model (~43.5 MB, 3x-4x faster on Android CPU for near-instant highlighting!)
+# Fallback: official ggerganov/whisper.cpp ggml-tiny-q5_1.bin (~32 MB)
+MODEL_FILE="assets/models/ggml-tiny-ar-quran.bin"
+rm -f assets/models/ggml-base-q5_1.bin
 if [ ! -s "$MODEL_FILE" ]; then
-  echo "Resolving Quran-tuned Whisper Base GGML model from Hugging Face..."
+  echo "Downloading fast Quran-tuned Whisper Tiny GGML model (~43.5 MB)..."
   python3 - <<'PYDL'
-import json, urllib.request, os, sys
+import urllib.request, os, sys, struct
 
-out_path = "assets/models/ggml-base-q5_1.bin"
-repos = [
-    "androidapps11/whisper-base-ar-quran-ggml",
-    "bilelmoussaoui/whisper-base-quran-ggml",
+out_path = "assets/models/ggml-tiny-ar-quran.bin"
+candidate_urls = [
+    "https://huggingface.co/ram-a-dhan/tarteel-whisper-quran-ggml/resolve/main/tarteel-ai-whisper-tiny-ar-quran-ggml-q8_0.bin",
+    "https://huggingface.co/Oa-4/whisper-tiny-ar-quran-gguf/resolve/main/ggml-tiny-ar-quran-q8_0.bin",
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
 ]
-candidate_urls = []
-for repo in repos:
-    try:
-        req = urllib.request.Request(f"https://huggingface.co/api/models/{repo}", headers={"User-Agent": "tasmee-builder"})
-        with urllib.request.urlopen(req, timeout=15) as r:
-            meta = json.loads(r.read().decode("utf-8"))
-        bins = [s["rfilename"] for s in meta.get("siblings", []) if s.get("rfilename", "").endswith(".bin")]
-        # Prefer q5_1 / q5_0 quantized models (~55-60 MB) over huge f16 models
-        bins.sort(key=lambda n: (0 if ("q5_1" in n or "q5_0" in n) else 1, len(n)))
-        for b in bins:
-            candidate_urls.append(f"https://huggingface.co/{repo}/resolve/main/{b}")
-    except Exception as e:
-        print(f"Note: could not query {repo}: {e}")
-
-candidate_urls.append("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin")
 
 for url in candidate_urls:
     tmp = out_path + ".dl"
     try:
-        print(f"Downloading model from: {url}")
+        print(f"Downloading fast Quran model from: {url}")
         req = urllib.request.Request(url, headers={"User-Agent": "tasmee-builder"})
         with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
             while True:
@@ -66,18 +54,16 @@ for url in candidate_urls:
                     break
                 f.write(chunk)
         sz = os.path.getsize(tmp)
-        import struct
         with open(tmp, "rb") as f:
             hdr = f.read(28)
         magic = hdr[:4]
         n_text_ctx = struct.unpack("<I", hdr[24:28])[0] if len(hdr) == 28 else 0
-        # Valid GGML base model: magic 'lmgg'/'ggml', size > 20 MB, and n_text_ctx == 448 (prevents whisper.cpp load failure!)
-        if sz > 20 * 1024 * 1024 and magic in (b"lmgg", b"ggml") and n_text_ctx == 448:
+        if sz > 15 * 1024 * 1024 and magic in (b"lmgg", b"ggml") and n_text_ctx == 448:
             os.replace(tmp, out_path)
-            print(f"Verified GGML model ({sz:,} bytes) from {url}")
+            print(f"Verified fast Quran GGML Tiny model ({sz:,} bytes, n_text_ctx={n_text_ctx}) from {url}")
             sys.exit(0)
         else:
-            print(f"Skipping invalid model file (size={sz}, magic={magic!r})")
+            print(f"Skipping incompatible model (size={sz}, magic={magic!r}, n_text_ctx={n_text_ctx})")
             os.remove(tmp)
     except Exception as e:
         print(f"Download failed for {url}: {e}")

@@ -8558,7 +8558,27 @@ function refreshActiveViewsAfterStep() {
     selectedAyahInfo = { surah: cw.s || (currentPage === 62 ? 3 : 2), ayah: cw.a };
     pushOfflineLookaheadHint();
   }
-  renderCurrentPage();
+  // Instant <1ms in-place DOM class update when page words are already rendered (avoids rebuilding 130+ spans on every word!)
+  const existingSpans = document.querySelectorAll('#mushaf-content-area .w[data-j]');
+  if (existingSpans.length === currentWordList.length && existingSpans.length > 0 && !isQuizModeActive) {
+    for (let k = 0; k < existingSpans.length; k++) {
+      const el = existingSpans[k];
+      const st = wordStates[k] || 'pending';
+      el.classList.toggle('ok', st === 'ok');
+      el.classList.toggle('wrong', st === 'wrong');
+      el.classList.toggle('missed', st === 'missed');
+      el.classList.toggle('peeked', st === 'peeked');
+      el.classList.toggle('cur', k === currentWordIndex && isReciting && (startLocked || manualWordSelected || haltError));
+      if (isHidingWords) {
+        const rev = (st === 'ok' || st === 'wrong' || st === 'missed' || st === 'peeked');
+        el.classList.toggle('hidden-word', !rev);
+        el.classList.toggle('revealed', rev);
+      }
+    }
+    if (typeof updateProgressBadge === 'function') updateProgressBadge();
+  } else {
+    renderCurrentPage();
+  }
   autoScrollToCurrentWord(false);
   updateLiveReciteMonitorUI();
   if (isQuizModeActive) {

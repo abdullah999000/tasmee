@@ -43,7 +43,7 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  static const String _bundledModelAsset = 'assets/models/ggml-base-q5_1.bin';
+  static const String _bundledModelAsset = 'assets/models/ggml-tiny-ar-quran.bin';
   static const String _bundledQuranAsset = 'assets/data/quran_full_604.json';
   static const String _audioFolderName = 'Quran App Audio';
   static const Set<String> _audioExts = {'.mp3', '.m4a', '.aac', '.wav', '.flac'};
@@ -156,10 +156,10 @@ class _HomeState extends State<Home> {
 
   Future<String?> _extractBundledWhisperModelOnce() async {
     try {
-      final targetPath = await _whisper.getPath(WhisperModel.base);
+      final targetPath = await _whisper.getPath(WhisperModel.tiny);
       final outFile = File(targetPath);
       // Fast path: if valid >20MB model is already extracted on disk, DO NOT reload 60MB asset into RAM!
-      if (await outFile.exists() && await outFile.length() > 20 * 1024 * 1024) {
+      if (await outFile.exists() && await outFile.length() > 15 * 1024 * 1024) {
         _extractedModelPath = outFile.path;
         return _extractedModelPath;
       }
@@ -167,7 +167,7 @@ class _HomeState extends State<Home> {
       final tmpFile = File('${targetPath}.tmp');
       final data = await rootBundle.load(_bundledModelAsset);
       final expectedBytes = data.lengthInBytes;
-      if (expectedBytes > 20 * 1024 * 1024) {
+      if (expectedBytes > 15 * 1024 * 1024) {
         await tmpFile.writeAsBytes(
           data.buffer.asUint8List(data.offsetInBytes, expectedBytes),
           flush: true,
@@ -493,7 +493,7 @@ class _HomeState extends State<Home> {
     if (_usingOfflineWhisper) {
       final modelPath = await _prepareBundledWhisperModel();
       if (modelPath != null) {
-        await _startOfflineWhisperDirectWav(modelPath);
+        await _startOfflineWhisperLive(modelPath, promptHint);
       }
     } else {
       try { await _stt.stop(); } catch (_) {}
@@ -538,7 +538,7 @@ class _HomeState extends State<Home> {
     _js('status', '⏳ [3] جارٍ تجهيز نموذج التسميع المحلي...');
     final modelPath = await _prepareBundledWhisperModel();
     if (modelPath != null) {
-      final started = await _startOfflineWhisperDirectWav(modelPath);
+      final started = await _startOfflineWhisperLive(modelPath, promptHint);
       if (started) return;
     } else {
       _js('status', '⚠️ [3] ملف النموذج المحلي غير موجود داخل التطبيق');
@@ -652,7 +652,7 @@ class _HomeState extends State<Home> {
       });
 
       final session = await _whisper.transcribeLive(
-        model: WhisperModel.base,
+        model: WhisperModel.tiny,
         pcm16Stream: pcmStream,
         lang: 'ar',
         initialPrompt: null,
@@ -666,7 +666,7 @@ class _HomeState extends State<Home> {
       _whisperSession = session;
       _js('status', '🎙️ التسميع المحلي جاهز بدون إنترنت — اقرأ من أي موضع في الصفحة');
       _liveWatchdogTimer?.cancel();
-      _liveWatchdogTimer = Timer(const Duration(milliseconds: 4500), () {
+      _liveWatchdogTimer = Timer(const Duration(milliseconds: 3000), () {
         if (_want && !_chunkedModeActive && _livePartialsCount == 0) {
           _switchToOfflineWhisperChunked();
         }
@@ -761,7 +761,7 @@ class _HomeState extends State<Home> {
       }
       final hint = _currentPromptHint.isNotEmpty ? _currentPromptHint : null;
       final res = await _whisper.transcribe(
-        model: WhisperModel.base,
+        model: WhisperModel.tiny,
         audioPath: recordedPath,
         lang: 'ar',
         initialPrompt: hint,
@@ -823,8 +823,8 @@ class _HomeState extends State<Home> {
             _js('level', normPct);
             // Once decoder is idle: flush at ~0.90s on breath pause, or at ~1.44s continuously
             if (!_isTranscribingNow) {
-              if (heardVoiceInSeg && t >= 4 && amp.current < -42.0) break;
-              if (t >= 7) break;
+              if (heardVoiceInSeg && t >= 3 && amp.current < -42.0) break;
+              if (t >= 5) break;
             }
           } catch (_) {}
         }
