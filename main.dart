@@ -73,6 +73,8 @@ class _HomeState extends State<Home> {
   int _chunkLastFlushMs = 0;
   Timer? _liveWatchdogTimer;
   int _wavLoopEpoch = 0;
+  int _pendingTranscribeJobs = 0;
+  bool _offlineHeardAny = false;
   WhisperLiveSession? _whisperSession;
   StreamSubscription<String>? _whisperPartialSub;
   String? _locale;
@@ -481,6 +483,8 @@ class _HomeState extends State<Home> {
   Future<void> _resetLiveSession({String? promptHint, bool preferOffline = false}) async {
     if (!_want) return;
     _chunkAccumulatedText = '';
+    _offlineHeardAny = false;
+    _pendingTranscribeJobs = 0;
     _chunkBuffer.clear();
     if (_usingOfflineWhisper) {
       final modelPath = await _prepareBundledWhisperModel();
@@ -709,6 +713,8 @@ class _HomeState extends State<Home> {
     _usingOfflineWhisper = true;
     _liveWatchdogTimer?.cancel();
     _chunkAccumulatedText = '';
+    _offlineHeardAny = false;
+    _pendingTranscribeJobs = 0;
     _chunkBuffer.clear();
     final myEpoch = ++_wavLoopEpoch;
     try {
@@ -740,12 +746,12 @@ class _HomeState extends State<Home> {
       }
       // Skip pure silence segments (< -45 dBFS) to save CPU & avoid Whisper silence hallucinations
       if (maxDb < -45.0) {
-        if (_chunkAccumulatedText.isEmpty) {
+        if (!_offlineHeardAny) {
           _js('status', '🎙️ [5] التسميع المحلي يستمع الآن — ابدأ القراءة...');
         }
         return;
       }
-      if (_chunkAccumulatedText.isEmpty) {
+      if (!_offlineHeardAny) {
         _js('status', '⚙️ [5] جارٍ تحليل المقطع الصوتي (${sz ~/ 1024} KB) محليًا...');
       }
       final res = await _whisper.transcribe(
@@ -760,9 +766,10 @@ class _HomeState extends State<Home> {
       final clean = _cleanWhisperText(res?.transcription.text ?? '');
       if (_want && _chunkedModeActive && _wavLoopEpoch == myEpoch) {
         if (clean.isNotEmpty) {
-          _chunkAccumulatedText = _chunkAccumulatedText.isEmpty ? clean : '$_chunkAccumulatedText $clean';
-          _js('result', {'text': _chunkAccumulatedText, 'final': false});
-        } else if (_chunkAccumulatedText.isEmpty) {
+          _offlineHeardAny = true;
+          // Emit bounded delta chunk directly (O(1) size even after 60+ minutes — zero accumulation lag!)
+          _js('result', {'text': clean, 'final': false, 'offlineDelta': true});
+        } else if (!_offlineHeardAny) {
           _js('status', '🎙️ [6] التسميع المحلي نشط (${sz ~/ 1024} KB) — اقرأ بصوت أوضح...');
         }
       }
@@ -770,6 +777,8 @@ class _HomeState extends State<Home> {
       if (_want && _chunkedModeActive && _wavLoopEpoch == myEpoch) {
         _js('status', '⚠️ [6] خطأ في تحويل الصوت المحلي: $e');
       }
+    } finally {
+      if (_pendingTranscribeJobs > 0) _pendingTranscribeJobs--;
     }
   }
 
@@ -790,9 +799,9 @@ class _HomeState extends State<Home> {
           ),
           path: wavPath,
         );
-        // Fast adaptive 1.26s segment (flushes early at ~0.72s on a short breath pause after voice!)
+        // Fast adaptive 1.08s segment (flushes early at ~0.54s on a short breath pause after voice!)
         bool heardVoiceInSeg = false;
-        for (int t = 0; t < 7; t++) {
+        for (int t = 0; t < 6; t++) {
           if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
           await Future.delayed(const Duration(milliseconds: 180));
           try {
@@ -801,18 +810,21 @@ class _HomeState extends State<Home> {
             if (amp.current > -40.0) heardVoiceInSeg = true;
             final normPct = ((amp.current + 55.0) * 1.9).clamp(0.0, 100.0).round();
             _js('level', normPct);
-            // Early flush when reader finishes a short phrase/breath after >= 0.72s
-            if (heardVoiceInSeg && t >= 3 && amp.current < -42.0) break;
+            // Early flush when reader finishes a short phrase/breath after >= 0.54s
+            if (heardVoiceInSeg && t >= 2 && amp.current < -42.0) break;
           } catch (_) {}
         }
         final recordedPath = await _recorder.stop();
         if (!_want || !_chunkedModeActive || _wavLoopEpoch != myEpoch) break;
-        if (recordedPath != null) {
+        if (recordedPath != null && _pendingTranscribeJobs < 2) {
           final segDb = maxDb;
-          // Zero-gap pipeline: chain transcription in background while next segment starts recording IMMEDIATELY!
+          _pendingTranscribeJobs++;
+          // Zero-gap pipeline with bounded queue (max 2 in flight) so latency NEVER accumulates over 60 min!
           prevTranscribe = prevTranscribe.then((_) {
             if (_want && _chunkedModeActive && _wavLoopEpoch == myEpoch) {
               return _transcribeWavSegmentAsync(recordedPath, myEpoch, segDb);
+            } else {
+              if (_pendingTranscribeJobs > 0) _pendingTranscribeJobs--;
             }
           });
         }

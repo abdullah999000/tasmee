@@ -4865,6 +4865,10 @@ if (window.Tasmee) {
     if (type === 'result' && r.onresult) {
       const txt = typeof data === 'string' ? data : ((data && (data.text || data.transcript)) || '');
       const isFin = typeof data === 'object' && data !== null ? !!(data.final ?? data.isFinal ?? false) : false;
+      window.__offlineDeltaEvent = !!(typeof data === 'object' && data !== null && data.offlineDelta);
+      if (window.__offlineDeltaEvent) {
+        window.__isOfflineWhisperMode = true;
+      }
       const it = [{ transcript: txt }];
       if (data && Array.isArray(data.alts)) {
         data.alts.forEach(a => { if (a && a !== txt) it.push({ transcript: String(a) }); });
@@ -7422,6 +7426,8 @@ function startRecitation() {
   initialGrace = 0;
   pendingSmartTokens = [];
   pendingSmartTime = 0;
+  offlineCarryPrefix = '';
+  window.__isOfflineWhisperMode = false;
   pendingMismatchFn = null;
   pendingMismatchMeta = null;
   // resume after a pause: same page, same pointer -> keep errors / progress, AND still allow starting from another place on the page if the user reads elsewhere!
@@ -8227,7 +8233,8 @@ function isRecognizerSlip(token, expected, nextToken, nextExpected) {
   const b = normArabic(expected).replace(/\s+/g, '');
   if (!a || !b || b.length < 3 || SHORT_PARTICLES.has(b)) return false;
   const pSim = phoneticSimScore(a, b);
-  if (pSim >= 0.62) return true;
+  const slipThresh = (typeof window !== 'undefined' && window.__isOfflineWhisperMode) ? 0.52 : 0.62;
+  if (pSim >= slipThresh) return true;
   if (isReciting && lastAlternatives.length > 1 && bestHeardScore(token, expected) >= 0.72) return true;
   return false;
 }
@@ -8563,7 +8570,10 @@ function scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, isPartial) {
   }
   clearTimeout(interimMistakeTimer);
   const fast = isFastSpeech();
-  const waitMs = isPartial ? (fast ? 1350 : 1700) : (fast ? 800 : 1100);
+  const isOffMode = (typeof window !== 'undefined' && window.__isOfflineWhisperMode);
+  const waitMs = isOffMode
+    ? (isPartial ? 2100 : 1750)
+    : (isPartial ? (fast ? 1350 : 1700) : (fast ? 800 : 1100));
   pendingMismatchMeta = {
     capIdx, gi, token, epoch,
     expected: currentWordList[capIdx]?.t || '',
@@ -8603,7 +8613,16 @@ function alignedStart(tokens) {
   return Math.min(processed, tokens.length);
 }
 
+let offlineCarryPrefix = '';
+function isSuffixOfWord(frag, fullWord) {
+  const a = normArabic(frag).replace(/\s+/g, '');
+  const b = normArabic(fullWord).replace(/\s+/g, '');
+  return a.length >= 2 && a.length < b.length && b.endsWith(a);
+}
+
 function processRecitedText(text, isFinal) {
+  const isDelta = !!(typeof window !== 'undefined' && window.__offlineDeltaEvent);
+  if (typeof window !== 'undefined') window.__offlineDeltaEvent = false;
   if (pageAdvancing) { pendingAdvanceText = text; return; }
   if (!text || currentWordIndex >= currentWordList.length) return;
   advancePastPauseMarks();
@@ -8612,6 +8631,24 @@ function processRecitedText(text, isFinal) {
   const rawTokens = normArabic(text).split(/\s+/).filter(Boolean);
   let tokens = normalizeTokenStream(rawTokens);
   if (!tokens.length) return;
+
+  // Offline boundary stitching: reassemble a word split across two WAV chunks (e.g., "العا" + "لمين" -> "العالمين")
+  if (isDelta && offlineCarryPrefix) {
+    const expNow = currentWordList[currentWordIndex]?.t || '';
+    if (expNow && isWordMatch(offlineCarryPrefix + tokens[0], expNow)) {
+      tokens[0] = offlineCarryPrefix + tokens[0];
+    }
+    offlineCarryPrefix = '';
+  }
+  // Offline boundary tail absorption: ignore a leftover suffix fragment of the word just accepted
+  if (isDelta && tokens.length > 0 && currentWordIndex > 0 && wordStates[currentWordIndex - 1] === 'ok') {
+    const prevExp = currentWordList[currentWordIndex - 1]?.t || '';
+    const curExpCheck = currentWordList[currentWordIndex]?.t || '';
+    if (prevExp && !isWordMatch(tokens[0], curExpCheck) && isSuffixOfWord(tokens[0], prevExp)) {
+      tokens = tokens.slice(1);
+      if (!tokens.length) return;
+    }
+  }
   if (isReciting) resetSilenceHintTimer();
 
   // Strip leading Isti'adhah ("أعوذ بالله من الشيطان الرجيم") and Basmalah ("بسم الله الرحمن الرحيم")
@@ -8739,7 +8776,12 @@ function processRecitedText(text, isFinal) {
     }
   }
 
-  const startIdx = alignedStart(tokens);
+  if (isDelta) {
+    lastProcessedTokenCount = 0;
+    prevTokenList = [];
+    utterEpoch++;
+  }
+  const startIdx = isDelta ? 0 : alignedStart(tokens);
   lastProcessedTokenCount = startIdx;
   prevTokenList = tokens;
   latestTokenList = tokens;
@@ -8963,10 +9005,22 @@ function processRecitedText(text, isFinal) {
       }
     }
 
+    // ---- 5b. Offline Whisper stray boundary artifact guard (skip 1 garbled token when nextToken is the exact expected word!) ----
+    if (isDelta && nextToken && isWordMatch(nextToken, currentExpected) && (!nextNextToken || !nextExpected || isWordMatch(nextNextToken, nextExpected))) {
+      lastProcessedTokenCount = gi + 1;
+      continue;
+    }
+
     // ---- 6. A REAL MISTAKE on currentWordIndex (confirmed, never premature on unstable interim):
     //         - Final result, confirmed 2-word omission, or interim token with >= 2 tokens already spoken after it -> trigger mistake.
     //         - Otherwise (unstable interim / mid-word Madd / short pause) -> defer via adaptive confirmation timer. ----
     const partial = isPartialOfExpected(token, currentExpected);
+    if (isDelta && partial && isLastToken) {
+      // Carry word split at end of offline WAV chunk to stitch cleanly with the next chunk (zero false error!)
+      offlineCarryPrefix = token;
+      lastProcessedTokenCount = gi + 1;
+      break;
+    }
     const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= 2);
     if (stable) {
       lastProcessedTokenCount = gi + 1;
