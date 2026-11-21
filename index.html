@@ -4818,17 +4818,30 @@ if (window.Tasmee) {
       this.interimResults = true;
       window.__sr = this;
     }
-    start() {
-      let promptHint = '';
+    _buildCleanPrompt() {
       try {
+        const surahTitle = (document.getElementById('top-surah-title')?.textContent || '').trim();
+        const unlocked = (typeof startLocked !== 'undefined' && !startLocked);
+        if (unlocked) {
+          // Neutral short Quranic prompt only — avoids Whisper hallucinating random ayahs from elsewhere on the page!
+          return ('بسم الله الرحمن الرحيم ' + surahTitle).trim().slice(0, 120);
+        }
         if (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList) && currentWordList.length > 0) {
-          const unlocked = (typeof startLocked !== 'undefined' && !startLocked);
-          const stIdx = unlocked ? 0 : Math.max(0, (typeof currentWordIndex === 'number' ? currentWordIndex : 0) - 2);
-          const maxW = unlocked ? 110 : 28;
-          promptHint = currentWordList.slice(stIdx, stIdx + maxW).map(w => w && w.t ? w.t : '').filter(Boolean).join(' ').slice(0, 550);
+          const stIdx = Math.max(0, (typeof currentWordIndex === 'number' ? currentWordIndex : 0));
+          return currentWordList.slice(stIdx, stIdx + 8).map(w => w && w.t ? w.t : '').filter(Boolean).join(' ').slice(0, 140);
         }
       } catch (_) {}
-      Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: true, partialResults: true, prompt: promptHint }));
+      return '';
+    }
+    start() {
+      const promptHint = this._buildCleanPrompt();
+      const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
+      Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint }));
+    }
+    resetSession() {
+      const promptHint = this._buildCleanPrompt();
+      const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
+      Tasmee.postMessage(JSON.stringify({ a: 'reset_session', lang: this.lang, offline: isOfflineNow, prompt: promptHint }));
     }
     stop() {
       Tasmee.postMessage(JSON.stringify({ a: 'stop' }));
@@ -6177,6 +6190,23 @@ async function loadMushafPage(pageNumber) {
   wordErrors = [];
   clearReplayState();
   pageProgressed = false;
+  // If actively reciting when switching pages, flush old-page transcript buffers & reset live ASR session
+  if (typeof isReciting !== 'undefined' && isReciting) {
+    pendingSmartTokens = [];
+    pendingSmartTime = 0;
+    lastProcessedTokenCount = 0;
+    prevTokenList = [];
+    latestTokenList = [];
+    utterEpoch++;
+    if (!pageAdvancing) {
+      startLocked = !smartStartEnabled;
+    }
+    try {
+      if (recognitionEngine && typeof recognitionEngine.resetSession === 'function') {
+        recognitionEngine.resetSession();
+      }
+    } catch (_) {}
+  }
   renderCurrentPage();
 }
 
@@ -7740,22 +7770,9 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   const W = live.length, T = tokens.length;
   if (T < 1 || W < 1) return { state: 'wait', reason: 'few-words' };
 
-  // Fast-path: 1 distinctive Quranic word (>= 5 letters) that occurs only once on the page
-  if (T === 1) {
-    const tok0 = normArabic(tokens[0]);
-    if (tok0.length >= 5 && !SHORT_PARTICLES.has(tok0)) {
-      const hits = [];
-      for (let j = 0; j < W; j++) {
-        if (strictFn(tokens[0], wordTexts[live[j]])) hits.push(live[j]);
-      }
-      if (hits.length === 1) {
-        return {
-          state: 'locked', score: 3, strict: 1,
-          firstWord: hits[0], lastWord: hits[0], matched: [hits[0]],
-          consumedTokens: 1
-        };
-      }
-    }
+  // Require at least 2 words before jumping away from the current cursor to another position on the page
+  // (Prevents false random jumps from a single Whisper word or ambient noise; per PDF Sec 13.2)
+  if (T < 2) {
     return { state: 'wait', reason: 'few-words' };
   }
 
@@ -7856,8 +7873,18 @@ async function finishPageOrAdvance(consumed) {
     showPageTurnToastOnly(target, 'next');
     initialGrace = 0; haltAheadHits = 0; haltError = null;
     const hb = document.getElementById('halt-alert-bar'); if (hb) hb.style.display = 'none';
-    lastProcessedTokenCount = advanceBaseCount;
-    prevTokenList = latestTokenList;
+    startLocked = true;
+    pageProgressed = false;
+    pendingSmartTokens = [];
+    lastProcessedTokenCount = 0;
+    prevTokenList = [];
+    latestTokenList = [];
+    utterEpoch++;
+    try {
+      if (recognitionEngine && typeof recognitionEngine.resetSession === 'function') {
+        recognitionEngine.resetSession();
+      }
+    } catch (_) {}
     const carry = pendingAdvanceText;
     pageAdvancing = false;
     if (carry && isReciting) processRecitedText(carry, false);
@@ -8540,21 +8567,36 @@ function processRecitedText(text, isFinal) {
     }
   }
 
-  // ---- smart start & anywhere-on-page pickup: do NOT force starting from top of page ----
+  // ---- Unified Local-Cursor-First + Anywhere-On-Page Smart Start (Online & Offline) ----
   if ((!startLocked || (smartStartEnabled && isFreshStart() && !manualWordSelected)) && !isQuizModeActive) {
     const curExp = currentWordList[currentWordIndex]?.t || '';
-    const nxtExp = currentWordList[currentWordIndex + 1]?.t || '';
+    let nxtLiveIdx = currentWordIndex + 1;
+    while (nxtLiveIdx < currentWordList.length && isQuranPauseMark(currentWordList[nxtLiveIdx]?.t)) nxtLiveIdx++;
+    const nxtExp = currentWordList[nxtLiveIdx]?.t || '';
     const matchesCurrentPointer = tokens.length > 0 && (
       isWordMatch(tokens[0], curExp) ||
       (tokens.length > 1 && isWordMatch(tokens[0] + tokens[1], curExp))
     );
-    // If resuming from a pause on the same page and the first word matches the resume position, lock immediately!
-    if (!startLocked && resumeCandidateIdx >= 0 && currentWordIndex === resumeCandidateIdx && matchesCurrentPointer) {
+    const matchesNextAfterCurrent = tokens.length >= 2 && nxtExp && (
+      isWordMatch(tokens[1], nxtExp) ||
+      (tokens.length > 2 && isWordMatch(tokens[1] + tokens[2], nxtExp))
+    );
+
+    // Priority 1: If reading from the current cursor (top of page word 0, tapped word, or paused resume spot),
+    // lock IMMEDIATELY onto currentWordIndex so the engine NEVER jumps away to a similar phrase elsewhere!
+    if (matchesCurrentPointer && (
+      matchesNextAfterCurrent ||
+      (resumeCandidateIdx >= 0 && currentWordIndex === resumeCandidateIdx) ||
+      (tokens.length === 1 && isStrictMatch(tokens[0], curExp))
+    )) {
       startLocked = true;
       pageProgressed = true;
       resumeCandidateIdx = -1;
       pendingSmartTokens = [];
+      primaryAnchorIdx = currentWordIndex;
+      primaryAnchorStates = wordStates.slice();
     } else if (!startLocked || !matchesCurrentPointer) {
+      // Priority 2: Reader started from a different part of THIS page -> locate strictly within currentWordList (current page only!)
       const CarryActive = !startLocked && pendingSmartTokens.length > 0;
       const fullSearchTokens = CarryActive ? [...pendingSmartTokens, ...tokens] : tokens;
       const winStart = Math.max(0, fullSearchTokens.length - 14);
@@ -8566,17 +8608,12 @@ function processRecitedText(text, isFinal) {
         lastProcessedTokenCount = consumedInCurrent; prevTokenList = tokens; latestTokenList = tokens;
         if (!applySmartStart(r)) return;
         if (consumedInCurrent >= tokens.length) return;
-      } else if (matchesCurrentPointer && tokens.length >= 2 && nxtExp && isWordMatch(tokens[1], nxtExp)) {
-        // First 2 words match currentWordIndex and currentWordIndex+1 directly
-        startLocked = true;
-        pageProgressed = true;
-        pendingSmartTokens = [];
       } else if (!startLocked) {
         lastProcessedTokenCount = 0; prevTokenList = tokens; latestTokenList = tokens;
         smartStartWaitTokens = searchTokens.length;
         smartStatus(r.state === 'ambiguous'
-          ? '⚠️ الموضع متشابه في أكثر من مكان — اضغط على الكلمة التي بدأت منها'
-          : '🔎 جارٍ تحديد موضع البداية… تابع القراءة (لا تُحسب أخطاء الآن)');
+          ? '⚠️ الموضع متشابه في أكثر من مكان بالصفحة — أكمل كلمة فارقة أو اضغط على الآية'
+          : '🔎 جارٍ تحديد موضع البداية في الصفحة الحالية… تابع القراءة');
         return;
       }
     } else {

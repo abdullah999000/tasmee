@@ -56,7 +56,21 @@ python3 patch_manifest.py _build/android/app/src/main/AndroidManifest.xml
 
 cd _build
 flutter pub get
-BUILD_NUM="${GITHUB_RUN_NUMBER:-2}"
+RAW_RUN="${GITHUB_RUN_NUMBER:-10}"
+BUILD_NUM=$(( RAW_RUN < 10 ? 10 + RAW_RUN : RAW_RUN ))
+echo "Building Release APK with applicationId=com.tasmee.tasmee versionCode=$BUILD_NUM..."
 flutter build apk --release --build-number="$BUILD_NUM"
 cp build/app/outputs/flutter-apk/app-release.apk ../tasmee.apk
+
+# Cryptographic verification: confirm APK is signed with the fixed tasmee-release.jks certificate
+EXPECTED_SHA256="4F:1F:F8:1D:1F:F9:7D:1B:AA:4A:64:2F:ED:88:C9:EA:3E:13:C3:A6:1F:0B:CD:FE:8D:4F:AB:8E:1A:8E:FD:70"
+if command -v keytool >/dev/null 2>&1; then
+  ACTUAL_CERT="$(keytool -printcert -jarfile ../tasmee.apk 2>/dev/null || true)"
+  echo "$ACTUAL_CERT" | grep -E "Owner:|SHA256:" || true
+  if ! echo "$ACTUAL_CERT" | grep -q "$EXPECTED_SHA256"; then
+    echo "ERROR: APK was NOT signed with fixed release certificate ($EXPECTED_SHA256)!" >&2
+    exit 1
+  fi
+  echo "Verified fixed release signature SHA-256: $EXPECTED_SHA256"
+fi
 echo "Done: $(cd .. && pwd)/tasmee.apk"
