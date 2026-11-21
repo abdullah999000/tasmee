@@ -31,8 +31,8 @@ import json, urllib.request, os, sys
 
 out_path = "assets/models/ggml-base-q5_1.bin"
 repos = [
-    "bilelmoussaoui/whisper-base-quran-ggml",
     "androidapps11/whisper-base-ar-quran-ggml",
+    "bilelmoussaoui/whisper-base-quran-ggml",
 ]
 candidate_urls = []
 for repo in repos:
@@ -62,10 +62,13 @@ for url in candidate_urls:
                     break
                 f.write(chunk)
         sz = os.path.getsize(tmp)
+        import struct
         with open(tmp, "rb") as f:
-            magic = f.read(4)
-        # Valid GGML magic is 0x67676d6c ('lmgg' little-endian or 'ggml') and size > 20 MB
-        if sz > 20 * 1024 * 1024 and magic in (b"lmgg", b"ggml"):
+            hdr = f.read(28)
+        magic = hdr[:4]
+        n_text_ctx = struct.unpack("<I", hdr[24:28])[0] if len(hdr) == 28 else 0
+        # Valid GGML base model: magic 'lmgg'/'ggml', size > 20 MB, and n_text_ctx == 448 (prevents whisper.cpp load failure!)
+        if sz > 20 * 1024 * 1024 and magic in (b"lmgg", b"ggml") and n_text_ctx == 448:
             os.replace(tmp, out_path)
             print(f"Verified GGML model ({sz:,} bytes) from {url}")
             sys.exit(0)
