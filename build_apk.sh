@@ -45,8 +45,12 @@ cp pubspec.yaml _build/pubspec.yaml
 rm -rf _build/lib _build/assets
 cp -r lib _build/lib
 cp -r assets _build/assets
-if [ -f android_signing/tasmee-release.jks ]; then
+if [ -f tasmee-release.jks ]; then
+  cp -f tasmee-release.jks _build/android/app/tasmee-release.jks
+elif [ -f android_signing/tasmee-release.jks ]; then
   cp -f android_signing/tasmee-release.jks _build/android/app/tasmee-release.jks
+else
+  echo "WARNING: tasmee-release.jks not found! Release APK will fall back to ephemeral debug signing."
 fi
 python3 patch_manifest.py _build/android/app/src/main/AndroidManifest.xml
 

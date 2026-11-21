@@ -4847,6 +4847,9 @@ if (window.Tasmee) {
       r.onresult({ resultIndex: 0, results: [it] });
     } else if (type === 'error' && r.onerror) {
       r.onerror({ error: (data && data.error) ? data.error : data });
+    } else if (type === 'status') {
+      const pv = document.getElementById('live-heard-preview');
+      if (pv && data) pv.textContent = String(data);
     } else if (type === 'end' && r.onend) {
       r.onend();
     }
@@ -7142,6 +7145,12 @@ let lastSpeechActivityTime = 0;
 let localAcousticTimer = null;
 
 async function startMicrophoneStream() {
+  // CRITICAL: Inside the Flutter app (Android/iOS), native AudioRecorder owns the mic for offline Whisper.
+  // Calling WebView getUserMedia() simultaneously causes an Android AudioRecord hardware conflict!
+  if (window.Tasmee) {
+    isAudioInputActive = true;
+    return true;
+  }
   try {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       micStream = await navigator.mediaDevices.getUserMedia({

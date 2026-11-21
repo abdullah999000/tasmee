@@ -83,9 +83,10 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
                     "    }\n"
                 )
                 g_s = re.sub(r'(android\s*\{)', r'\1' + sign_block, g, count=1)
-                g_s = g_s.replace(
-                    'signingConfig = signingConfigs.getByName("debug")',
+                g_s = re.sub(
+                    r"""signingConfig\s*=\s*signingConfigs\.(?:getByName|findByName)\(["']debug["']\)|signingConfig\s*=\s*signingConfigs\[["']debug["']\]""",
                     'signingConfig = signingConfigs.getByName("release")',
+                    g_s,
                 )
             else:
                 sign_block = (
