@@ -474,9 +474,6 @@ class _HomeState extends State<Home> {
         }
       } else if (act == 'loadBundledQuran') {
         _pushBundledQuranIfPresent();
-      } else if (act == 'download_fastconformer') {
-        _downloadFastConformerModel();
-      } else if (act == 'check_fastconformer') {
       }
     } catch (_) {}
   }
