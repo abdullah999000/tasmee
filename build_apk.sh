@@ -45,10 +45,14 @@ cp pubspec.yaml _build/pubspec.yaml
 rm -rf _build/lib _build/assets
 cp -r lib _build/lib
 cp -r assets _build/assets
+if [ -f android_signing/tasmee-release.jks ]; then
+  cp -f android_signing/tasmee-release.jks _build/android/app/tasmee-release.jks
+fi
 python3 patch_manifest.py _build/android/app/src/main/AndroidManifest.xml
 
 cd _build
 flutter pub get
-flutter build apk --release
+BUILD_NUM="${GITHUB_RUN_NUMBER:-2}"
+flutter build apk --release --build-number="$BUILD_NUM"
 cp build/app/outputs/flutter-apk/app-release.apk ../tasmee.apk
 echo "Done: $(cd .. && pwd)/tasmee.apk"

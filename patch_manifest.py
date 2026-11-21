@@ -65,5 +65,46 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
             )
             g_new = re.sub(r'(android\s*\{)', r'\1' + lint_block, g, count=1)
             if g_new != g:
-                open(gpath, "w", encoding="utf-8").write(g_new)
+                g = g_new
+                open(gpath, "w", encoding="utf-8").write(g)
                 print(f"{fname} patched (disabled release lint crash + noCompress bin)")
+        # Wire consistent release signing keystore so future APK updates install cleanly over previous builds
+        ks_file = os.path.join(app_dir, "tasmee-release.jks")
+        if os.path.exists(ks_file) and "tasmee-release.jks" not in g:
+            if is_kts:
+                sign_block = (
+                    "\n    signingConfigs {\n"
+                    "        create(\"release\") {\n"
+                    "            storeFile = file(\"tasmee-release.jks\")\n"
+                    "            storePassword = \"tasmee_release_2026\"\n"
+                    "            keyAlias = \"tasmee\"\n"
+                    "            keyPassword = \"tasmee_release_2026\"\n"
+                    "        }\n"
+                    "    }\n"
+                )
+                g_s = re.sub(r'(android\s*\{)', r'\1' + sign_block, g, count=1)
+                g_s = g_s.replace(
+                    'signingConfig = signingConfigs.getByName("debug")',
+                    'signingConfig = signingConfigs.getByName("release")',
+                )
+            else:
+                sign_block = (
+                    "\n    signingConfigs {\n"
+                    "        release {\n"
+                    "            storeFile file(\"tasmee-release.jks\")\n"
+                    "            storePassword \"tasmee_release_2026\"\n"
+                    "            keyAlias \"tasmee\"\n"
+                    "            keyPassword \"tasmee_release_2026\"\n"
+                    "        }\n"
+                    "    }\n"
+                )
+                g_s = re.sub(r'(android\s*\{)', r'\1' + sign_block, g, count=1)
+                g_s = g_s.replace(
+                    'signingConfig signingConfigs.debug',
+                    'signingConfig signingConfigs.release',
+                )
+            if g_s != g:
+                g = g_s
+                open(gpath, "w", encoding="utf-8").write(g)
+                print(f"{fname} patched (fixed release signing keystore)")
+

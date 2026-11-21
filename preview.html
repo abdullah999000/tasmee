@@ -4822,8 +4822,10 @@ if (window.Tasmee) {
       let promptHint = '';
       try {
         if (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList) && currentWordList.length > 0) {
-          const stIdx = Math.max(0, (typeof currentWordIndex === 'number' ? currentWordIndex : 0) - 2);
-          promptHint = currentWordList.slice(stIdx, stIdx + 24).map(w => w && w.t ? w.t : '').filter(Boolean).join(' ');
+          const unlocked = (typeof startLocked !== 'undefined' && !startLocked);
+          const stIdx = unlocked ? 0 : Math.max(0, (typeof currentWordIndex === 'number' ? currentWordIndex : 0) - 2);
+          const maxW = unlocked ? 110 : 28;
+          promptHint = currentWordList.slice(stIdx, stIdx + maxW).map(w => w && w.t ? w.t : '').filter(Boolean).join(' ').slice(0, 550);
         }
       } catch (_) {}
       Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: true, partialResults: true, prompt: promptHint }));
@@ -7458,6 +7460,7 @@ function stopRecitation() {
   stopMicrophoneStream();
   if (isReciting && startLocked) { lastStopInfo = { page: currentPage, idx: currentWordIndex }; try { localStorage.setItem('tasmee_resume', JSON.stringify(lastStopInfo)); } catch (_) {} }
   isReciting = false;
+  manualWordSelected = false;
   clearTimeout(interimMistakeTimer);
   hideSilencePeekBar();
   btnRecite.classList.remove('recording');
@@ -7752,10 +7755,9 @@ function smartLocateStart(wordTexts, tokens, strictFn, simFn) {
   const sm = (i, j) => {
     const t = tokens[i], w = wordTexts[live[j]];
     if (strictFn(t, w)) return MATCH;
-    if (w && w.indexOf(' ') >= 0) {
-      if (i + 1 < T && strictFn(t + tokens[i + 1], w)) return MATCH;
-      if (i > 0 && strictFn(tokens[i - 1] + t, w)) return MATCH;
-    }
+    if (i + 1 < T && strictFn(t + tokens[i + 1], w)) return MATCH;
+    if (i > 0 && strictFn(tokens[i - 1] + t, w)) return MATCH;
+    if ((typeof isWordMatch === 'function' && isWordMatch(t, w)) || (typeof simFn === 'function' && simFn(t, w) >= 0.74)) return FUZZY;
     return MIS;
   };
   for (let i = 0; i <= T; i++) { H.push(new Array(W + 1).fill(0)); B.push(new Array(W + 1).fill(0)); }
@@ -8546,11 +8548,12 @@ function processRecitedText(text, isFinal) {
     } else if (!startLocked || !matchesCurrentPointer) {
       const CarryActive = !startLocked && pendingSmartTokens.length > 0;
       const fullSearchTokens = CarryActive ? [...pendingSmartTokens, ...tokens] : tokens;
-      const searchTokens = fullSearchTokens.slice(0, 4);
+      const winStart = Math.max(0, fullSearchTokens.length - 14);
+      const searchTokens = fullSearchTokens.slice(winStart);
       const carryLen = CarryActive ? pendingSmartTokens.length : 0;
       const r = smartLocateStart(currentWordList.map(w => w.t), searchTokens, isStrictMatch, simScore);
       if (r.state === 'locked') {
-        const consumedInCurrent = Math.max(0, r.consumedTokens - carryLen);
+        const consumedInCurrent = Math.max(0, (winStart + r.consumedTokens) - carryLen);
         lastProcessedTokenCount = consumedInCurrent; prevTokenList = tokens; latestTokenList = tokens;
         if (!applySmartStart(r)) return;
         if (consumedInCurrent >= tokens.length) return;
