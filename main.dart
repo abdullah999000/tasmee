@@ -14,7 +14,6 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
-import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import 'package:whisper_ggml/whisper_ggml.dart';
 
 void main() {
@@ -46,8 +45,6 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   static const String _bundledModelAsset = 'assets/models/ggml-tiny-ar-quran.bin';
   static const String _bundledQuranAsset = 'assets/data/quran_full_604.json';
-  static const String _fcBaseUrl = 'https://huggingface.co/dev-ahmedhany/stt_ar_fastconformer_hybrid_large_streaming_pcd_v1.1-sherpa/resolve/main';
-  static const List<String> _fcFiles = ['tokens.txt', 'joiner.onnx', 'decoder.onnx', 'encoder.onnx'];
   static const String _audioFolderName = 'Quran App Audio';
   static const Set<String> _audioExts = {'.mp3', '.m4a', '.aac', '.wav', '.flac'};
 
@@ -64,14 +61,6 @@ class _HomeState extends State<Home> {
   bool _onDeviceGotResult = false;
   bool _onDeviceFallbackTriggered = false;
   bool _onDeviceSttUnavailable = false;
-  bool _usingFastConformer = false;
-  bool _sherpaBindingsInited = false;
-  bool _fcDownloading = false;
-  bool _sherpaDecoding = false;
-  sherpa.OnlineRecognizer? _sherpaRecognizer;
-  sherpa.OnlineStream? _sherpaStream;
-  StreamSubscription<Uint8List>? _sherpaPcmSub;
-  String _lastSherpaText = '';
   String? _extractedModelPath;
   Future<String?>? _modelExtractFuture;
   Map<int, List<Map<String, dynamic>>>? _bundledPages;
@@ -124,7 +113,6 @@ class _HomeState extends State<Home> {
         _applyInsets();
         _checkTheme();
         _pushBundledQuranIfPresent();
-        _checkFastConformerStatus();
       }));
 
     final platform = _web.platform;
@@ -442,9 +430,6 @@ class _HomeState extends State<Home> {
     _themeTimer?.cancel();
     _whisperPartialSub?.cancel();
     _chunkPcmSub?.cancel();
-    _sherpaPcmSub?.cancel();
-    try { _sherpaStream?.free(); } catch (_) {}
-    try { _sherpaRecognizer?.free(); } catch (_) {}
     _posSub?.cancel();
     _durSub?.cancel();
     _stateSub?.cancel();
@@ -492,7 +477,6 @@ class _HomeState extends State<Home> {
       } else if (act == 'download_fastconformer') {
         _downloadFastConformerModel();
       } else if (act == 'check_fastconformer') {
-        _checkFastConformerStatus();
       }
     } catch (_) {}
   }
@@ -513,14 +497,7 @@ class _HomeState extends State<Home> {
     _offlineHeardAny = false;
     _pendingTranscribeJobs = 0;
     _chunkBuffer.clear();
-    if (_usingFastConformer) {
-      try {
-        if (_sherpaRecognizer != null && _sherpaStream != null) {
-          _sherpaRecognizer!.reset(_sherpaStream!);
-          _lastSherpaText = '';
-        }
-      } catch (_) {}
-    } else if (_usingOfflineWhisper) {
+    if (_usingOfflineWhisper) {
       final modelPath = await _prepareBundledWhisperModel();
       if (modelPath != null) {
         await _startOfflineWhisperLive(modelPath, promptHint);
@@ -574,326 +551,6 @@ class _HomeState extends State<Home> {
   }
 
 
-  static const String _portableFcFolderName = 'Tasmee Offline Arabic';
-
-  Future<List<Directory>> _candidateFastConformerDirs() async {
-    final dirs = <Directory>[];
-    if (Platform.isAndroid) {
-      dirs.add(Directory('/storage/emulated/0/Download/$_portableFcFolderName'));
-      dirs.add(Directory('/storage/emulated/0/Music/$_audioFolderName/$_portableFcFolderName'));
-      try {
-        final ext = await getExternalStorageDirectory();
-        if (ext != null) dirs.add(Directory('${ext.path}/$_portableFcFolderName'));
-      } catch (_) {}
-    } else if (Platform.isIOS) {
-      try {
-        final docs = await getApplicationDocumentsDirectory();
-        dirs.add(Directory('${docs.path}/$_portableFcFolderName'));
-      } catch (_) {}
-    }
-    final sup = await getApplicationSupportDirectory();
-    dirs.add(Directory('${sup.path}/fastconformer_quran_v1_1'));
-    return dirs;
-  }
-
-  Future<bool> _dirHasValidFastConformer(Directory dir) async {
-    try {
-      final enc = File('${dir.path}/encoder.onnx');
-      final dec = File('${dir.path}/decoder.onnx');
-      final joi = File('${dir.path}/joiner.onnx');
-      final tok = File('${dir.path}/tokens.txt');
-      return await enc.exists() && await enc.length() > 100 * 1024 * 1024 &&
-          await dec.exists() && await dec.length() > 5 * 1024 * 1024 &&
-          await joi.exists() && await joi.length() > 1 * 1024 * 1024 &&
-          await tok.exists() && await tok.length() > 1000;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<Directory?> _findReadyFastConformerDir() async {
-    final dirs = await _candidateFastConformerDirs();
-    for (final d in dirs) {
-      if (await _dirHasValidFastConformer(d)) return d;
-    }
-    return null;
-  }
-
-  Future<Directory> _writableFastConformerDir() async {
-    await _requestAudioStoragePermissionIfNeeded();
-    final dirs = await _candidateFastConformerDirs();
-    for (final d in dirs) {
-      try {
-        if (!await d.exists()) await d.create(recursive: true);
-        final probe = File('${d.path}/.write_test');
-        await probe.writeAsString('ok', flush: true);
-        if (await probe.exists()) await probe.delete();
-        return d;
-      } catch (_) {}
-    }
-    final sup = await getApplicationSupportDirectory();
-    final fallback = Directory('${sup.path}/fastconformer_quran_v1_1');
-    await fallback.create(recursive: true);
-    return fallback;
-  }
-
-  Future<Directory> _fastConformerDir() async {
-    return (await _findReadyFastConformerDir()) ?? await _writableFastConformerDir();
-  }
-
-  Future<bool> _isFastConformerReady() async {
-    return (await _findReadyFastConformerDir()) != null;
-  }
-
-  String _formatPortablePath(String raw) {
-    if (Platform.isIOS) return 'الملفات (Files) ← مُسمِّع ← $_portableFcFolderName';
-    return raw.replaceFirst('/storage/emulated/0/', 'التخزين الداخلي/');
-  }
-
-  void _emitFastConformerUi(String state, String msg, {int? pct, String? folderPath}) {
-    final payload = {
-      'state': state,
-      'msg': msg,
-      if (pct != null) 'pct': pct,
-      if (folderPath != null) 'path': folderPath,
-    };
-    _web.runJavaScript(
-      'window.__fastConformerStatus&&window.__fastConformerStatus(${jsonEncode(payload)})',
-    );
-  }
-
-  Future<void> _checkFastConformerStatus() async {
-    if (_fcDownloading) {
-      _emitFastConformerUi('downloading', 'جارٍ تحميل حزمة العربية بدون إنترنت...');
-      return;
-    }
-    final readyDir = await _findReadyFastConformerDir();
-    if (readyDir != null) {
-      final nice = _formatPortablePath(readyDir.path);
-      _emitFastConformerUi('ready', '✅ مثبّت وجاهز للبث الفوري بدون إنترنت (قابل للنقل لأي هاتف)', folderPath: nice);
-    } else {
-      _emitFastConformerUi(
-        'not_installed',
-        'غير محمّل — اضغط للتحميل أو انسخ مجلد «$_portableFcFolderName» من هاتف آخر إلى التنزيلات',
-        folderPath: 'التخزين الداخلي/Download/$_portableFcFolderName',
-      );
-    }
-  }
-
-  Future<void> _downloadFastConformerModel() async {
-    if (_fcDownloading) return;
-    final existing = await _findReadyFastConformerDir();
-    if (existing != null) {
-      _emitFastConformerUi('ready', '✅ حزمة العربية بدون إنترنت مثبّتة وجاهزة بالفعل', folderPath: _formatPortablePath(existing.path));
-      return;
-    }
-    _fcDownloading = true;
-    _emitFastConformerUi('downloading', '⏳ جارٍ بدء تحميل حزمة العربية بدون إنترنت (~480 ميجا)...', pct: 0);
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
-    try {
-      final dir = await _writableFastConformerDir();
-      final nicePath = _formatPortablePath(dir.path);
-      _emitFastConformerUi('downloading', '📂 الحفظ في: $nicePath', pct: 1, folderPath: nicePath);
-      const totalExpectedBytes = 478 * 1024 * 1024;
-      int cumulativeDone = 0;
-      int lastEmitMs = 0;
-
-      for (final fname in _fcFiles) {
-        final outFile = File('${dir.path}/$fname');
-        if (await outFile.exists() && await outFile.length() > 1000) {
-          cumulativeDone += await outFile.length();
-          continue;
-        }
-        final tmpFile = File('${dir.path}/$fname.tmp');
-        final req = await client.getUrl(Uri.parse('$_fcBaseUrl/$fname'));
-        final res = await req.close();
-        if (res.statusCode != 200) {
-          throw Exception('HTTP ${res.statusCode} أثناء تحميل $fname');
-        }
-        final sink = tmpFile.openWrite();
-        await for (final chunk in res) {
-          sink.add(chunk);
-          cumulativeDone += chunk.length;
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (now - lastEmitMs >= 350) {
-            lastEmitMs = now;
-            final pct = ((cumulativeDone * 100) ~/ totalExpectedBytes).clamp(1, 99);
-            final mb = (cumulativeDone / (1024 * 1024)).toStringAsFixed(0);
-            _emitFastConformerUi('downloading', '⬇️ جارٍ التحميل: $mb / 478 ميجا ($pct%) — $fname', pct: pct);
-          }
-        }
-        await sink.flush();
-        await sink.close();
-        if (await outFile.exists()) await outFile.delete();
-        await tmpFile.rename(outFile.path);
-      }
-
-      if (await _isFastConformerReady()) {
-        _emitFastConformerUi('ready', '✅ تم التحميل والحفظ بنجاح! يمكنك نقل هذا المجلد لأي هاتف آخر', pct: 100, folderPath: nicePath);
-      } else {
-        _emitFastConformerUi('error', '⚠️ اكتمل التحميل لكن الملفات ناقصة — حاول مجددًا على Wi-Fi مستقر');
-      }
-    } catch (e) {
-      _emitFastConformerUi('error', '⚠️ تعذّر التحميل: $e');
-    } finally {
-      client.close(force: true);
-      _fcDownloading = false;
-    }
-  }
-
-  Future<bool> _startOfflineFastConformer() async {
-    try {
-      var micStatus = await Permission.microphone.status;
-      if (!micStatus.isGranted) {
-        micStatus = await Permission.microphone.request();
-      }
-      final hasPerm = micStatus.isGranted || await _recorder.hasPermission();
-      if (!hasPerm) {
-        _want = false;
-        _js('error', 'not-allowed');
-        return true;
-      }
-
-      _js('status', '⚡ جارٍ تشغيل محرك البث الفوري القرآني (FastConformer v1.1)...');
-      await _stopOfflineFastConformer();
-      await _stopOfflineWhisperLive(emitFinal: false);
-
-      final supDir = await getApplicationSupportDirectory();
-      final sentinel = File('${supDir.path}/fc_init.lock');
-      if (await sentinel.exists()) {
-        // Prior launch crashed natively while loading FastConformer -> safely fall back to Whisper instead of crashing again!
-        try { await sentinel.delete(); } catch (_) {}
-        _js('status', '⚠️ تم تجاوز FastConformer تلقائيًا بعد إغلاق سابق — جاري التشغيل بمحرك Whisper الآمن');
-        return false;
-      }
-
-      // Free parked Whisper memory before loading 456MB FastConformer ONNX encoder
-      try { _whisper.releaseModel(); } catch (_) {}
-
-      final dir = await _fastConformerDir();
-      if (!_sherpaBindingsInited) {
-        sherpa.initBindings();
-        _sherpaBindingsInited = true;
-      }
-      if (_sherpaRecognizer == null) {
-        await sentinel.writeAsString('init', flush: true);
-        try {
-          final transducer = sherpa.OnlineTransducerModelConfig(
-            encoder: '${dir.path}/encoder.onnx',
-            decoder: '${dir.path}/decoder.onnx',
-            joiner: '${dir.path}/joiner.onnx',
-          );
-          // Use modelType: '' (auto-detect from ONNX metadata) so sherpa-onnx C++ never aborts on 'transducer'
-          final model = sherpa.OnlineModelConfig(
-            transducer: transducer,
-            tokens: '${dir.path}/tokens.txt',
-            modelType: '',
-            numThreads: 2,
-            provider: 'cpu',
-          );
-          _sherpaRecognizer = sherpa.OnlineRecognizer(
-            sherpa.OnlineRecognizerConfig(
-              model: model,
-              decodingMethod: 'greedy_search',
-              enableEndpoint: true,
-              rule1MinTrailingSilence: 2.4,
-              rule2MinTrailingSilence: 1.2,
-              rule3MinUtteranceLength: 30.0,
-            ),
-          );
-        } finally {
-          try { if (await sentinel.exists()) await sentinel.delete(); } catch (_) {}
-        }
-      }
-
-      _sherpaStream = _sherpaRecognizer!.createStream();
-      _lastSherpaText = '';
-      _sherpaDecoding = false;
-      _usingFastConformer = true;
-      _usingOfflineWhisper = false;
-      _usingOnDeviceStt = false;
-
-      final pcmStream = await _recorder.startStream(const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-        autoGain: true,
-        echoCancel: false,
-        noiseSuppress: false,
-      ));
-
-      _js('status', '⚡ البث القرآني الفوري (FastConformer v1.1) نشط بدون إنترنت — اقرأ الآن');
-
-      _sherpaPcmSub = pcmStream.listen((Uint8List bytes) {
-        if (!_want || !_usingFastConformer || _sherpaStream == null || _sherpaRecognizer == null) return;
-        final sampleCount = bytes.length ~/ 2;
-        if (sampleCount <= 0) return;
-        final bd = ByteData.sublistView(bytes);
-        final f32 = Float32List(sampleCount);
-        double sumSq = 0.0;
-        for (int i = 0; i < sampleCount; i++) {
-          final v = bd.getInt16(i * 2, Endian.little) / 32768.0;
-          f32[i] = v;
-          sumSq += v * v;
-        }
-        final nowMs = DateTime.now().millisecondsSinceEpoch;
-        if (nowMs - _lastLevelEmitMs >= 180) {
-          _lastLevelEmitMs = nowMs;
-          final rms = math.sqrt(sumSq / sampleCount);
-          _js('level', (rms * 420.0).clamp(0.0, 100.0).round());
-        }
-        _sherpaStream!.acceptWaveform(samples: f32, sampleRate: 16000);
-        if (_sherpaDecoding) return;
-        _sherpaDecoding = true;
-        try {
-          while (_sherpaRecognizer!.isReady(_sherpaStream!)) {
-            _sherpaRecognizer!.decode(_sherpaStream!);
-          }
-          final txt = _sherpaRecognizer!.getResult(_sherpaStream!).text.trim();
-          final isEp = _sherpaRecognizer!.isEndpoint(_sherpaStream!);
-          if (txt.isNotEmpty && (txt != _lastSherpaText || isEp)) {
-            _lastSherpaText = txt;
-            _js('result', {'text': txt, 'final': isEp, 'fastConformer': true});
-          }
-          if (isEp) {
-            _sherpaRecognizer!.reset(_sherpaStream!);
-            _lastSherpaText = '';
-          }
-        } finally {
-          _sherpaDecoding = false;
-        }
-      }, onError: (_) {
-        if (_want && _usingFastConformer) {
-          _usingFastConformer = false;
-          Future.microtask(() async {
-            final mp = await _prepareBundledWhisperModel();
-            if (mp != null && _want) await _startOfflineWhisperLive(mp, _currentPromptHint);
-          });
-        }
-      });
-      return true;
-    } catch (e) {
-      _usingFastConformer = false;
-      _js('status', '⚠️ تعذّر تشغيل FastConformer ($e) — التبديل لمحرك Whisper المحلي');
-      return false;
-    }
-  }
-
-  Future<void> _stopOfflineFastConformer() async {
-    _usingFastConformer = false;
-    await _sherpaPcmSub?.cancel();
-    _sherpaPcmSub = null;
-    try {
-      if (await _recorder.isRecording()) await _recorder.stop();
-    } catch (_) {}
-    try {
-      _sherpaStream?.free();
-    } catch (_) {}
-    _sherpaStream = null;
-    _lastSherpaText = '';
-    _sherpaDecoding = false;
-  }
-
   Future<void> _start({String? promptHint, bool preferOffline = false}) async {
     _want = true;
     _currentPromptHint = (promptHint ?? '').trim();
@@ -913,21 +570,6 @@ class _HomeState extends State<Home> {
         _js('status', '🌐 التسميع المتصل يعمل — اقرأ من أي موضع في الصفحة');
         await _listenStt(onDevice: false);
         return;
-      }
-    } else {
-      // Offline Tier 1: True Streaming Quranic FastConformer v1.1 (sherpa-onnx, val_wer 1.50%) if downloaded on device
-      if (await _isFastConformerReady()) {
-        final okFc = await _startOfflineFastConformer();
-        if (okFc) return;
-      }
-      // Offline Tier 2: Try On-Device OS Streaming if available on this phone
-      if (!_onDeviceSttUnavailable && await _ensureSttInitialized()) {
-        _usingOfflineWhisper = false;
-        _usingOnDeviceStt = true;
-        _js('status', '⚡ التسميع المحلي الفوري (نواة الجهاز) نشط بدون إنترنت — اقرأ الآن');
-        final ok = await _listenStt(onDevice: true);
-        if (ok) return;
-        _usingOnDeviceStt = false;
       }
     }
 
@@ -1321,9 +963,6 @@ class _HomeState extends State<Home> {
     _usingOnDeviceStt = false;
     _onDeviceFallbackTriggered = false;
     _endTimer?.cancel();
-    if (_usingFastConformer || _sherpaStream != null) {
-      await _stopOfflineFastConformer();
-    }
     if (_usingOfflineWhisper || _whisperSession != null) {
       await _stopOfflineWhisperLive(emitFinal: false);
       _usingOfflineWhisper = false;
@@ -1341,13 +980,13 @@ class _HomeState extends State<Home> {
   }
 
   void _onStatus(String s) {
-    if (!_usingOfflineWhisper && !_usingFastConformer && (s == 'done' || s == 'notListening')) {
+    if (!_usingOfflineWhisper && (s == 'done' || s == 'notListening')) {
       _scheduleEnd();
     }
   }
 
   void _onError(dynamic e) {
-    if (_usingOfflineWhisper || _usingFastConformer) return;
+    if (_usingOfflineWhisper) return;
     final msg = (e.errorMsg ?? '').toString().toLowerCase();
     if (msg.contains('permission')) {
       _want = false;

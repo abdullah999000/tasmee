@@ -26,6 +26,8 @@ if "RecognitionService" not in s:
     s = s.replace("</manifest>", queries + "</manifest>", 1)
 # Arabic app name on the launcher
 s = re.sub(r'android:label="[^"]*"', 'android:label="مُسمِّع"', s, count=1)
+if "android:largeHeap" not in s:
+    s = s.replace("<application", '<application android:largeHeap="true"', 1)
 
 open(path, "w", encoding="utf-8").write(s)
 print("manifest patched")

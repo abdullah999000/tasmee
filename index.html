@@ -3535,11 +3535,6 @@ html[data-theme="light"] #tasmee-exit-toast {
 
     <!-- Right Actions -->
     <div class="top-actions">
-      <!-- Offline Arabic Pack Quick Button -->
-      <button class="icon-btn" id="btn-top-offline-ar" onclick="openOfflineArabicPackCard();" title="تحميل حزمة العربية للتسميع بدون إنترنت" style="position:relative;">
-        <svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"/></svg>
-        <span id="top-fc-dot" style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#f59e0b;"></span>
-      </button>
       <!-- Search Button -->
       <button class="icon-btn" id="btn-open-search" title="بحث في الآيات">
         <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -3829,29 +3824,6 @@ html[data-theme="light"] #tasmee-exit-toast {
         <button class="promo-btn-white" onclick="closeSettings(); openKhatmahDashboard();">اللوحة والدروس</button>
       </div>
     </div>
-
-    <!-- TOP CARD: تحميل حزمة العربية للتسميع بدون إنترنت (قابلة للنقل بين الهواتف) -->
-    <div id="card-offline-ar-top" style="margin:0 0 14px 0;padding:13px;border-radius:14px;background:linear-gradient(135deg,rgba(16,185,129,0.16),rgba(6,78,59,0.22));border:1.5px solid rgba(52,211,153,0.55);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
-        <span style="font-weight:800;font-size:14px;color:var(--accent-green);">⬇️ تحميل حزمة العربية للتسميع بدون إنترنت</span>
-        <span id="fc-badge-top" style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(245,158,11,0.2);color:#fbbf24;font-weight:700;">غير محمّلة</span>
-      </div>
-      <div id="fc-model-status-top" style="font-size:12px;opacity:0.9;margin-bottom:6px;line-height:1.5;">
-        محرك البث القرآني الفوري (FastConformer v1.1) — يُحفظ في مجلد ظاهر يمكنك نقله من هاتف لآخر بدون إعادة تحميل.
-      </div>
-      <div id="fc-folder-path-top" style="font-size:11px;opacity:0.85;margin-bottom:10px;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,0.25);word-break:break-word;">
-        📂 مسار الحفظ والنقل: التخزين الداخلي/Download/Tasmee Offline Arabic
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button id="btn-download-fc-top" onclick="requestFastConformerDownload();" style="flex:1;padding:9px 10px;border-radius:9px;background:var(--accent-green);border:none;color:#062119;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;">
-          ⬇️ تحميل العربية بدون إنترنت (~480 ميجا)
-        </button>
-        <button onclick="checkFastConformerNow();" title="فحص المجلد بعد النقل من هاتف آخر" style="padding:9px 11px;border-radius:9px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.25);color:inherit;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">
-          🔄 فحص
-        </button>
-      </div>
-    </div>
-
     <!-- GROUP 1: التجربة (Image 4) -->
     <div class="settings-group-card">
       <div class="settings-group-header">التجربة</div>
@@ -3909,14 +3881,6 @@ html[data-theme="light"] #tasmee-exit-toast {
           <option value="Abdul_Basit_Murattal_192kbps">عبد الباسط عبد الصمد (مرتل)</option>
           <option value="Husary_128kbps">محمود خليل الحصري (المصحف المعلم)</option>
         </select>
-        <!-- Portable Offline Arabic Pack Shortcut right next to External Audio Folder -->
-        <div style="margin-bottom:10px;padding:10px;border-radius:10px;background:rgba(16,185,129,0.12);border:1px solid rgba(52,211,153,0.4);">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
-            <span style="font-weight:700;font-size:13px;color:var(--accent-green);">⬇️ حزمة التسميع العربي بدون إنترنت (قابلة للنقل)</span>
-            <button onclick="requestFastConformerDownload();" style="padding:4px 10px;border-radius:7px;background:var(--accent-green);border:none;color:#062119;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;">تحميل</button>
-          </div>
-          <div style="font-size:11px;opacity:0.85;">تُحفظ في <b>التنزيلات / Tasmee Offline Arabic</b> ويمكنك نسخ المجلد لأي هاتف آخر مباشرة ثم الضغط على «فحص».</div>
-        </div>
         <!-- External User-Accessible Audio Folder ("Quran App Audio") on Android & iOS -->
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
@@ -4119,13 +4083,6 @@ html[data-theme="light"] #tasmee-exit-toast {
         <button onclick="playBellAlert('err'); triggerErrorVibration();" style="width:100%;padding:8px;border-radius:8px;background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#fca5a5;font-family:inherit;font-weight:700;cursor:pointer;margin-bottom:12px;">
           🔊 تجربة صوت الجرس العالي والاهتزاز الآن
         </button>
-        <div style="padding:10px;border-radius:10px;background:rgba(16,185,129,0.1);border:1px solid rgba(52,211,153,0.4);">
-          <div style="font-weight:700;color:var(--accent-green);margin-bottom:4px;">⚡ محرك البث القرآني الفوري أوفلاين (FastConformer v1.1)</div>
-          <div id="fc-model-status" style="font-size:12px;opacity:0.88;margin-bottom:8px;">غير محمّل — يعمل حاليًا بمحرك Whisper الاحتياطي</div>
-          <button id="btn-download-fc" onclick="requestFastConformerDownload();" style="width:100%;padding:8px;border-radius:8px;background:var(--accent-green);border:none;color:#062119;font-family:inherit;font-weight:700;cursor:pointer;">
-            ⬇️ تحميل المحرك الفوري مرة واحدة (~480 ميجا بالـ Wi-Fi)
-          </button>
-        </div>
       </div>
 
       <!-- بدء وإيقاف الجلسة -->
@@ -4918,7 +4875,7 @@ if (window.Tasmee) {
       window.__offlineDeltaEvent = !!(typeof data === 'object' && data !== null && data.offlineDelta);
       if (window.__offlineDeltaEvent || (typeof data === 'object' && data !== null && data.offlineWhisper)) {
         window.__isOfflineWhisperMode = true;
-      } else if (typeof data === 'object' && data !== null && (data.onDeviceStt || data.fastConformer)) {
+      } else if (typeof data === 'object' && data !== null && data.onDeviceStt) {
         window.__isOfflineWhisperMode = false;
       }
       const it = [{ transcript: txt }];
@@ -4936,57 +4893,6 @@ if (window.Tasmee) {
 }
 
 
-window.__fastConformerStatus = function(info) {
-  try {
-    const msgs = [document.getElementById('fc-model-status'), document.getElementById('fc-model-status-top')];
-    const btns = [document.getElementById('btn-download-fc'), document.getElementById('btn-download-fc-top')];
-    const pathEl = document.getElementById('fc-folder-path-top');
-    const badge = document.getElementById('fc-badge-top');
-    const dot = document.getElementById('top-fc-dot');
-    if (info && info.msg) msgs.forEach(el => { if (el) el.textContent = info.msg; });
-    if (pathEl && info && info.path) pathEl.textContent = '📂 مسار الحفظ والنقل: ' + info.path;
-    if (info) {
-      if (badge) {
-        badge.textContent = info.state === 'ready' ? '✅ جاهزة' : (info.state === 'downloading' ? ('⬇️ ' + (info.pct || 0) + '%') : 'غير محمّلة');
-        badge.style.background = info.state === 'ready' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)';
-        badge.style.color = info.state === 'ready' ? '#34d399' : '#fbbf24';
-      }
-      if (dot) dot.style.background = info.state === 'ready' ? '#22c55e' : '#f59e0b';
-      btns.forEach(btn => {
-        if (!btn) return;
-        if (info.state === 'ready') {
-          btn.textContent = '✅ مثبّتة وجاهزة بدون إنترنت';
-          btn.disabled = true;
-          btn.style.opacity = '0.8';
-        } else if (info.state === 'downloading') {
-          btn.textContent = '⏳ جارٍ التحميل' + (info.pct ? ' (' + info.pct + '%)' : '...');
-          btn.disabled = true;
-        } else {
-          btn.textContent = '⬇️ تحميل العربية بدون إنترنت (~480 ميجا)';
-          btn.disabled = false;
-          btn.style.opacity = '1';
-        }
-      });
-    }
-  } catch (_) {}
-};
-function openOfflineArabicPackCard() {
-  if (typeof openSettings === 'function') openSettings();
-  const card = document.getElementById('card-offline-ar-top');
-  if (card && typeof card.scrollIntoView === 'function') card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  checkFastConformerNow();
-}
-function checkFastConformerNow() {
-  if (!window.Tasmee) return;
-  try { Tasmee.postMessage(JSON.stringify({ a: 'check_fastconformer' })); } catch (_) {}
-}
-function requestFastConformerDownload() {
-  if (!window.Tasmee) {
-    window.__fastConformerStatus({ state: 'not_installed', msg: 'التحميل والحفظ القابل للنقل متاحان داخل تطبيق الأندرويد المثبّت على الهاتف.' });
-    return;
-  }
-  try { Tasmee.postMessage(JSON.stringify({ a: 'download_fastconformer' })); } catch (_) {}
-}
 
 // --- Android Back Button & Double-Back Exit Toast Controller ---
 let _tasmeeExitToastTimer = null;
