@@ -14,6 +14,14 @@ if [ -f index.html ]; then
   cp -f index.html preview.html
 fi
 
+# Accept Android SDK / NDK licenses automatically (required by whisper_ggml native C++ NDK build)
+SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+SDKMGR="$(command -v sdkmanager || echo "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")"
+if [ -x "$SDKMGR" ]; then
+  echo "Accepting Android SDK/NDK licenses..."
+  yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
+fi
+
 # Bundle quantized multilingual/Arabic Whisper GGML model (~59.7 MB) for 100% offline recitation
 MODEL_FILE="assets/models/ggml-base-q5_1.bin"
 if [ ! -s "$MODEL_FILE" ]; then
