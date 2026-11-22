@@ -865,7 +865,7 @@ class _HomeState extends State<Home> {
       await repo.loadSurahAsync(surahNumber);
       final tracker = rq.ReciteQuran(
         repository: repo,
-        config: rq.TrackerConfig.dictation(),
+        config: rq.TrackerConfig.normal(),
         isTajweed: false,
       );
       await tracker.initialize();
