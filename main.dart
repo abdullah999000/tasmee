@@ -795,7 +795,13 @@ class _HomeState extends State<Home> {
     }
   }
 
+  static const MethodChannel _vibratorChannel = MethodChannel('com.tasmee.tasmee/vibrator');
+
   Future<void> _triggerNativeErrorVibration() async {
+    try {
+      final ok = await _vibratorChannel.invokeMethod<bool>('vibrate', {'ms': 180});
+      if (ok == true) return;
+    } catch (_) {}
     try {
       await HapticFeedback.heavyImpact();
       Future.delayed(const Duration(milliseconds: 85), () {
@@ -812,7 +818,7 @@ class _HomeState extends State<Home> {
       _reciteAudio?.clearBuffer();
       try { (_reciteTracker as dynamic).resetBuffer(); } catch (_) {}
       if (surah >= 1 && surah <= 114) _reciteActiveSurah = surah;
-      _tryJumpReciteToStartPosition(_reciteActiveSurah, ayah > 0 ? ayah : 1, wordInAyah >= 0 ? wordInAyah : 0);
+      _tryJumpReciteToStartPosition(_reciteActiveSurah, ayah > 0 ? ayah : 1, wordInAyah >= 0 ? wordInAyah : 0, force: true);
     } catch (_) {}
   }
 
@@ -826,8 +832,8 @@ class _HomeState extends State<Home> {
     } catch (_) {}
   }
 
-  void _tryJumpReciteToStartPosition(int surah, int ayah, int wordInAyah) {
-    if (ayah <= 1 && wordInAyah <= 0) return;
+  void _tryJumpReciteToStartPosition(int surah, int ayah, int wordInAyah, {bool force = false}) {
+    if (!force && ayah <= 1 && wordInAyah <= 0) return;
     try {
       final dynamic repoDyn = _reciteRepo;
       final List<dynamic> words = repoDyn.getSurahWords(surah) as List<dynamic>;

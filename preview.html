@@ -12251,7 +12251,8 @@ window.__onReciteQuranWord = function(ev) {
         const _conf = !ev.forceImmediate && typeof window.__evaluateReciteConfidence === 'function'
           ? window.__evaluateReciteConfidence(_tajweedMeta, ev)
           : { state: 'confirmed_error', deferMs: 0, reason: 'forced', isBoundary: false };
-        const _deferMs = _conf.deferMs || 0;
+        const _isStopOn = (typeof stopOnErrorMandatory !== 'undefined' && !!stopOnErrorMandatory);
+        const _deferMs = (_isStopOn && _conf.deferMs > 0 && _conf.reason !== 'long_madd_or_muqattaah' && _conf.reason !== 'breath_or_waqf' && !_conf.isBoundary) ? Math.min(_conf.deferMs, 220) : (_conf.deferMs || 0);
         if ((ev.recentSilenceMs || 0) >= 350 || _tajweedMeta.atValidWaqf) {
           window.__lastBreathOrWaqfTs = Date.now();
         }
@@ -12372,7 +12373,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
   const rms = (ev && typeof ev.chunkRms === 'number') ? ev.chunkRms : 0.05;
   const latencyMs = (ev && typeof ev.latencyMs === 'number') ? ev.latencyMs : 0;
   const rules = (tajweedMeta && Array.isArray(tajweedMeta.rules)) ? tajweedMeta.rules : [];
-  const isTajweedBoundary = rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'waqf_valid' || r === 'lam_shamsiyyah_wasl');
+  const isTajweedBoundary = rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'meem_sakinah');
 
   // 1. Long acoustic Madd / Ghunnah / Muqatta'ah stretch (PDF Sec 13.2: 300-600ms confirmation window)
   if (rules.includes('muqattaah_madd') || (voiceMs >= 900 && (rules.includes('madd') || rules.includes('ghunnah')))) {
@@ -12380,7 +12381,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
   }
   // 2. Active breathing pause or Waqf resumption (PDF Sec 13.4 & 16.3)
   if (silenceMs >= 350 || (tajweedMeta && tajweedMeta.atValidWaqf)) {
-    return { state: 'uncertain_wait', deferMs: 550, reason: 'breath_or_waqf', isBoundary: true };
+    return { state: 'uncertain_wait', deferMs: 550, reason: 'breath_or_waqf', isBoundary: false };
   }
   // 3. Boundary assimilation (Idgham / Ikhfa / Iqlab / Meem Sakinah)
   if (rules.includes('idgham') || rules.includes('iqlab') || rules.includes('ikhfa') || rules.includes('meem_sakinah') || rules.includes('lam_shamsiyyah_wasl')) {
@@ -12392,7 +12393,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
   }
   // 5. Temporary weak signal (low RMS) or high ASR latency jitter
   if ((rms > 0 && rms < 0.032) || latencyMs > 650) {
-    return { state: 'uncertain_wait', deferMs: 420, reason: 'low_signal_or_jitter', isBoundary: true };
+    return { state: 'uncertain_wait', deferMs: 420, reason: 'low_signal_or_jitter', isBoundary: false };
   }
   // 6. Other Tajweed words (Qalqalah / Tafkheem / Tarqeeq / short Madd/Ghunnah)
   if (tajweedMeta && tajweedMeta.hasTajweedOrWaqf) {

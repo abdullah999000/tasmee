@@ -138,3 +138,61 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
 
         if changed:
             open(gpath, "w", encoding="utf-8").write(g)
+
+# Patch MainActivity.kt with direct Android hardware Vibrator MethodChannel (bypasses MagicOS/Honor HapticFeedback mute)
+kotlin_root = os.path.join(app_dir, "src", "main", "kotlin")
+if os.path.isdir(kotlin_root):
+    for r_dir, _, f_names in os.walk(kotlin_root):
+        for fn in f_names:
+            if fn == "MainActivity.kt":
+                kt_path = os.path.join(r_dir, fn)
+                kt = open(kt_path, encoding="utf-8").read()
+                if "com.tasmee.tasmee/vibrator" not in kt:
+                    pkg_m = re.search(r'^package\s+([^\s]+)', kt, re.MULTILINE)
+                    pkg_line = f"package {pkg_m.group(1)}\n\n" if pkg_m else ""
+                    new_kt = (
+                        pkg_line
+                        + "import android.content.Context\n"
+                        + "import android.os.Build\n"
+                        + "import android.os.VibrationEffect\n"
+                        + "import android.os.Vibrator\n"
+                        + "import android.os.VibratorManager\n"
+                        + "import io.flutter.embedding.android.FlutterActivity\n"
+                        + "import io.flutter.embedding.engine.FlutterEngine\n"
+                        + "import io.flutter.plugin.common.MethodChannel\n\n"
+                        + "class MainActivity : FlutterActivity() {\n"
+                        + "    private val VIBRATOR_CHANNEL = \"com.tasmee.tasmee/vibrator\"\n\n"
+                        + "    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {\n"
+                        + "        super.configureFlutterEngine(flutterEngine)\n"
+                        + "        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VIBRATOR_CHANNEL).setMethodCallHandler { call, result ->\n"
+                        + "            if (call.method == \"vibrate\") {\n"
+                        + "                val ms = (call.argument<Int>(\"ms\") ?: 180).toLong().coerceIn(40L, 600L)\n"
+                        + "                try {\n"
+                        + "                    val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {\n"
+                        + "                        val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager\n"
+                        + "                        vm?.defaultVibrator\n"
+                        + "                    } else {\n"
+                        + "                        @Suppress(\"DEPRECATION\")\n"
+                        + "                        getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator\n"
+                        + "                    }\n"
+                        + "                    if (vibrator != null && vibrator.hasVibrator()) {\n"
+                        + "                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n"
+                        + "                            vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))\n"
+                        + "                        } else {\n"
+                        + "                            @Suppress(\"DEPRECATION\")\n"
+                        + "                            vibrator.vibrate(ms)\n"
+                        + "                        }\n"
+                        + "                    }\n"
+                        + "                    result.success(true)\n"
+                        + "                } catch (e: Exception) {\n"
+                        + "                    result.success(false)\n"
+                        + "                }\n"
+                        + "            } else {\n"
+                        + "                result.notImplemented()\n"
+                        + "            }\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}\n"
+                    )
+                    open(kt_path, "w", encoding="utf-8").write(new_kt)
+                    print(f"MainActivity.kt patched with native hardware Vibrator channel: {kt_path}")
