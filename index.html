@@ -7874,10 +7874,27 @@ function getWordMatchTier(spokenToken, expectedWord) {
   const phonB = normPhoneticTajweed(expectedWord);
   if (phonA && phonB && phonA.length >= 3 && phonA === phonB && normA[0] === normB[0]) return 1;
 
-  // --- Tier 2: Madd Elongation & Tajweed Assimilation (إدغام / تنوين) ---
+  // --- Tier 2: Madd Elongation, Lam Shamsiyyah, Hamzat Wasl & Tajweed Assimilation ---
   const flatA = wawA.replace(/(.)\1+/g, '$1');
   const flatB = wawB.replace(/(.)\1+/g, '$1');
   if (Math.min(flatA.length, flatB.length) >= 3 && flatA === flatB) return 2;
+
+  // General Lam Shamsiyyah in Wasl (الـ + ت ث د ذ ر ز س ش ص ض ط ظ ل ن):
+  // In connected recitation (e.g. يَٰٓأَيُّهَا ٱلنَّاسُ -> يَا أَيُّهَنَّاسُ), ASR may drop silent 'ال' or 'ل' (ناس / اناس for الناس).
+  if (/^ال[تثدذرزسشصضطظلن]/.test(normB) && normB.length >= 5) {
+    const sunStem = normB.slice(2);
+    const sunSkel = normSkeleton(sunStem).replace(/\s+/g, '');
+    if (normA === sunStem || normA === ('ا' + sunStem) || normA.replace(/ا$/g, '') === sunStem.replace(/ا$/g, '') || (skelA.length >= 3 && skelA === sunSkel)) {
+      return 2;
+    }
+  }
+  // General Hamzat Wasl leading Alif elision in connected speech (e.g. ٱتَّقُواْ -> تقوا، ٱهْدِنَا -> هدنا)
+  if ((String(expectedWord).startsWith('\u0671') || (/^ا[^ل]/.test(normB) && normB.length >= 4)) && normB.length >= 4) {
+    const waslStem = normB.slice(1);
+    if (waslStem.length >= 3 && (normA === waslStem || normA.replace(/وا$/g, 'و') === waslStem.replace(/وا$/g, 'و'))) {
+      return 2;
+    }
+  }
 
   // Spoken Tanwin / Idgham trailing 'ن' or 'ل' on short/medium words (e.g. هدى -> هدن/هدل، احد -> احدن، كفوا -> كفون)
   if (normA.length >= 3 && normB.length >= 3) {
@@ -7959,6 +7976,18 @@ function isIdghamMergedMatch(spokenToken, w1, w2) {
   // Idgham Shafawi (إدغام شفوي): Meem Sakinah + Meem (لهم مغفرة -> لهمغفرة)
   if (a.endsWith('م') && b.startsWith('م')) {
     if (isWordMatch(sp, a + b.slice(1))) return true;
+  }
+  // Lam Shamsiyyah Wasl merge across two words (e.g. يَٰٓأَيُّهَا ٱلنَّاسُ -> يايهاناس / يأيهناس، برب الناس -> بربناس)
+  if (/^ال[تثدذرزسشصضطظلن]/.test(b) && b.length >= 5) {
+    const bSun = b.slice(2);
+    if (isWordMatch(sp, a + bSun) || isWordMatch(sp, a.replace(/[اي]$/, '') + bSun)) return true;
+  }
+  // Hamzat Wasl & plural-Waw/Alif elision merge (e.g. ٱتَّقُواْ رَبَّكُمُ -> تقربكم / تقوربكم)
+  const aWasl = a.replace(/^ا/, '').replace(/وا$/, 'و');
+  const aWaslShort = a.replace(/^ا/, '').replace(/وا$/, '');
+  const bWasl = b.replace(/^ا/, '');
+  if (aWasl.length >= 2 && bWasl.length >= 2) {
+    if (isWordMatch(sp, aWasl + bWasl) || (aWaslShort.length >= 2 && isWordMatch(sp, aWaslShort + bWasl))) return true;
   }
   return false;
 }
@@ -12272,6 +12301,11 @@ window.__analyzeWordTajweedAndWaqf = function(wordObj, nextObj, prevObj) {
   if (bare.endsWith('م') && nxtBare && /^[مب]/.test(nxtBare)) {
     rules.push('meem_sakinah');
   }
+  // 3B. Lam Shamsiyyah / Hamzat Wasl connected boundary (e.g. يَٰٓأَيُّهَا ٱلنَّاسُ / ٱتَّقُواْ)
+  const bareWasl = bare.replace(/^[ٱإأآ]/, 'ا');
+  if (/^ال[تثدذرزسشصضطظلن]/.test(bareWasl) || txt.startsWith('\u0671')) {
+    rules.push('lam_shamsiyyah_wasl');
+  }
   // 4. Qalqalah (ق ط ب ج د with sukoon or at end of word/Waqf)
   if (/[قطبجد][\u0652\u06E1]/.test(txt) || /[قطبجد]$/.test(bare)) {
     rules.push('qalqalah');
@@ -12308,7 +12342,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
   const rms = (ev && typeof ev.chunkRms === 'number') ? ev.chunkRms : 0.05;
   const latencyMs = (ev && typeof ev.latencyMs === 'number') ? ev.latencyMs : 0;
   const rules = (tajweedMeta && Array.isArray(tajweedMeta.rules)) ? tajweedMeta.rules : [];
-  const isTajweedBoundary = rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'waqf_valid');
+  const isTajweedBoundary = rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'waqf_valid' || r === 'lam_shamsiyyah_wasl');
 
   // 1. Long acoustic Madd / Ghunnah / Muqatta'ah stretch (PDF Sec 13.2: 300-600ms confirmation window)
   if (rules.includes('muqattaah_madd') || (voiceMs >= 900 && (rules.includes('madd') || rules.includes('ghunnah')))) {
@@ -12319,7 +12353,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
     return { state: 'uncertain_wait', deferMs: 550, reason: 'breath_or_waqf', isBoundary: true };
   }
   // 3. Boundary assimilation (Idgham / Ikhfa / Iqlab / Meem Sakinah)
-  if (rules.includes('idgham') || rules.includes('iqlab') || rules.includes('ikhfa') || rules.includes('meem_sakinah')) {
+  if (rules.includes('idgham') || rules.includes('iqlab') || rules.includes('ikhfa') || rules.includes('meem_sakinah') || rules.includes('lam_shamsiyyah_wasl')) {
     return { state: 'uncertain_wait', deferMs: 500, reason: 'tajweed_boundary', isBoundary: true };
   }
   // 4. Incomplete pronunciation / slow start: never judge word wrong before articulation finishes!
