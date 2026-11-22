@@ -72,6 +72,10 @@ class _HomeState extends State<Home> {
   int _reciteStartAyah = 1;
   int _reciteStartWordInAyah = 0;
   int _reciteLastVoiceChunkMs = 0;
+  int _reciteVoiceStartMs = 0;
+  int _reciteSilenceStartMs = 0;
+  int _reciteLastSilenceDurationMs = 0;
+  double _reciteLastChunkRms = 0.0;
   bool _reciteSentinelClearedThisRun = false;
   Timer? _reciteSentinelClearTimer;
   int _reciteEpoch = 0;
@@ -906,6 +910,10 @@ class _HomeState extends State<Home> {
       _usingOfflineWhisper = false;
       final myEpoch = ++_reciteEpoch;
       _reciteLastVoiceChunkMs = DateTime.now().millisecondsSinceEpoch;
+      _reciteVoiceStartMs = 0;
+      _reciteSilenceStartMs = 0;
+      _reciteLastSilenceDurationMs = 0;
+      _reciteLastChunkRms = 0.0;
 
       // Clear crash sentinel if 4s of live audio streaming completes without native crash
       _reciteSentinelClearTimer?.cancel();
@@ -954,6 +962,9 @@ class _HomeState extends State<Home> {
             ? (nowMs - _reciteLastVoiceChunkMs).clamp(0, 5000)
             : 0;
 
+        final voiceActiveMs = _reciteVoiceStartMs > 0 ? (nowMs - _reciteVoiceStartMs).clamp(0, 12000) : 0;
+        final recentSilenceMs = _reciteLastSilenceDurationMs;
+        _reciteLastSilenceDurationMs = 0;
         _js('recite_word', {
           'wordId': ev.wordId.toString(),
           'surah': resolvedSurah,
@@ -965,6 +976,9 @@ class _HomeState extends State<Home> {
           'yellow': false,
           'red': isRed,
           'latencyMs': latencyMs,
+          'voiceActiveMs': voiceActiveMs,
+          'recentSilenceMs': recentSilenceMs,
+          'chunkRms': double.parse(_reciteLastChunkRms.toStringAsFixed(4)),
           'engine': 'recite_quran-zipformer-v3',
         });
       }, onError: (Object err) {
@@ -989,8 +1003,19 @@ class _HomeState extends State<Home> {
               cnt++;
             }
             final rms = cnt > 0 ? math.sqrt(sumSq / cnt) : 0.0;
+            _reciteLastChunkRms = rms;
             if (rms > 0.015) {
+              if (_reciteVoiceStartMs == 0) _reciteVoiceStartMs = nowMs;
+              if (_reciteSilenceStartMs > 0) {
+                _reciteLastSilenceDurationMs = (nowMs - _reciteSilenceStartMs).clamp(0, 15000);
+                _reciteSilenceStartMs = 0;
+              }
               _reciteLastVoiceChunkMs = nowMs;
+            } else {
+              if (_reciteSilenceStartMs == 0) _reciteSilenceStartMs = nowMs;
+              if (_reciteLastVoiceChunkMs > 0 && (nowMs - _reciteLastVoiceChunkMs) >= 280) {
+                _reciteVoiceStartMs = 0;
+              }
             }
             if (nowMs - _lastLevelEmitMs >= 160) {
               _lastLevelEmitMs = nowMs;
