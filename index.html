@@ -3543,6 +3543,10 @@ html[data-theme="light"] #tasmee-exit-toast {
       <button class="icon-btn" id="btn-open-khatmah" title="الختمة والورد اليومي">
         <svg viewBox="0 0 24 24"><path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>
       </button>
+      <!-- Standalone Offline Fast Quran ASR Download Button -->
+      <button class="icon-btn" id="btn-download-offline-asr" title="تحميل محرك التسميع السريع دون إنترنت (36 MB)" onclick="openOfflineModelPanel()">
+        <svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"/></svg>
+      </button>
       <!-- Settings Button -->
       <button class="icon-btn" id="btn-open-settings" title="الإعدادات">
         <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
@@ -3903,6 +3907,49 @@ html[data-theme="light"] #tasmee-exit-toast {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- STANDALONE PORTABLE OFFLINE FAST QURAN ASR ENGINE + DIAGNOSTICS -->
+    <div class="settings-group-card" id="offline-asr-model-card" style="border:1px solid rgba(52,211,153,0.35);">
+      <div class="settings-group-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>⚡ محرك البث القرآني الحي دون إنترنت (recite_quran Zipformer-v3)</span>
+        <span id="offline-asr-badge" style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(251,191,36,0.18);color:#fbbf24;">Whisper مدمج</span>
+      </div>
+      <div style="padding:10px 14px;font-size:12px;line-height:1.65;">
+        <div id="offline-asr-desc" style="opacity:0.9;margin-bottom:8px;">
+          مكتبة <b>recite_quran v1.0.5</b> بنموذج <b>Quran-Lab Zipformer-v3 Streaming</b> (~69 MB INT8 — دقة 3.46% WER، بث حي في Isolate منفصل مع Early Matching وWhisper مدمج كاحتياطي):
+        </div>
+        <div id="offline-asr-folder-path" style="font-size:11px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.06);margin-bottom:8px;word-break:break-word;direction:ltr;text-align:left;">
+          التخزين الداخلي/Download/Tasmee Offline Arabic
+        </div>
+        <div id="offline-asr-progress-wrap" style="display:none;margin-bottom:8px;">
+          <div style="height:7px;border-radius:999px;background:rgba(255,255,255,0.12);overflow:hidden;">
+            <div id="offline-asr-progress-bar" style="height:100%;width:0%;background:var(--accent-green);transition:width 0.2s;"></div>
+          </div>
+          <div id="offline-asr-progress-msg" style="font-size:11px;margin-top:4px;opacity:0.85;"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button type="button" id="btn-start-offline-model-dl" onclick="startOfflineModelDownload(false)" style="flex:1;min-width:160px;padding:9px 12px;border-radius:10px;border:none;background:var(--accent-green);color:#062317;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;">
+            ⚡ تهيئة / فحص محرك البث الحي (recite_quran)
+          </button>
+          <button type="button" onclick="verifyOfflineModelIntegrity()" style="padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.07);color:inherit;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">
+            🔍 فحص السلامة
+          </button>
+        </div>
+      </div>
+
+      <!-- ASR Engine Error & Diagnostics Logger (Read-only, never mutates Quran text) -->
+      <div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.1);font-size:11.5px;" id="asr-diagnostics-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-weight:700;">🧪 سجل تشخيص المحرك (ASR Diagnostics)</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" onclick="copyAsrDiagnosticsLog()" style="padding:3px 8px;border-radius:7px;border:1px solid rgba(52,211,153,0.4);background:transparent;color:var(--accent-green);font-family:inherit;font-size:11px;cursor:pointer;">📋 نسخ</button>
+            <button type="button" onclick="clearAsrDiagnosticsLog()" style="padding:3px 8px;border-radius:7px;border:1px solid rgba(248,113,113,0.4);background:transparent;color:#f87171;font-family:inherit;font-size:11px;cursor:pointer;">🗑️ مسح</button>
+          </div>
+        </div>
+        <div id="asr-diag-summary" style="opacity:0.85;margin-bottom:6px;">المحرك النشط: — | متوسط السرعة: — ms | تطابق: 0 | تباين: 0</div>
+        <div id="asr-diag-list" style="max-height:110px;overflow-y:auto;font-family:monospace;font-size:10.5px;opacity:0.8;background:rgba(0,0,0,0.22);padding:6px;border-radius:8px;direction:rtl;"></div>
       </div>
     </div>
 
@@ -4845,7 +4892,7 @@ if (window.Tasmee) {
       const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
       const pv = document.getElementById('live-heard-preview');
       if (pv) pv.textContent = '⏳ [1] جارٍ تشغيل الميكروفون...';
-      Tasmee.postMessage(JSON.stringify({ a: 'start', lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint }));
+      Tasmee.postMessage(JSON.stringify({ a: 'start', surah: (typeof currentWordList !== 'undefined' && currentWordList.length && currentWordList[Math.max(0, typeof currentWordIndex === 'number' ? currentWordIndex : 0)] ? Number(currentWordList[Math.max(0, typeof currentWordIndex === 'number' ? currentWordIndex : 0)].s || 1) : 1), lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint }));
     }
     resetSession() {
       const promptHint = this._buildCleanPrompt();
@@ -4868,6 +4915,18 @@ if (window.Tasmee) {
       if (pv && data) pv.textContent = String(data);
       return;
     }
+    if (type === 'model_status') {
+      if (typeof window.__onOfflineModelStatus === 'function') window.__onOfflineModelStatus(data || {});
+      return;
+    }
+    if (type === 'recite_word') {
+      if (typeof window.__onReciteQuranWord === 'function') window.__onReciteQuranWord(data || {});
+      return;
+    }
+    if (type === 'model_progress') {
+      if (typeof window.__onOfflineModelProgress === 'function') window.__onOfflineModelProgress(data || {});
+      return;
+    }
     const r = window.__sr; if (!r) return;
     if (type === 'result' && r.onresult) {
       const txt = typeof data === 'string' ? data : ((data && (data.text || data.transcript)) || '');
@@ -4877,6 +4936,21 @@ if (window.Tasmee) {
         window.__isOfflineWhisperMode = true;
       } else if (typeof data === 'object' && data !== null && data.onDeviceStt) {
         window.__isOfflineWhisperMode = false;
+      }
+      if (typeof data === 'object' && data !== null) {
+        if (data.engine) window.__lastAsrEngine = String(data.engine);
+        if (typeof data.latencyMs === 'number') window.__lastAsrLatencyMs = data.latencyMs;
+        if (window.TasmeeAsrDiagnostics && txt) {
+          const curWordEl = document.querySelector('.w.cur');
+          window.TasmeeAsrDiagnostics.log({
+            engine: data.engine || (window.__isOfflineWhisperMode ? 'whisper-tiny-ar-quran' : 'os-online'),
+            expected: curWordEl ? (curWordEl.dataset.word || curWordEl.textContent || '').trim() : '',
+            recognized: txt,
+            latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : null,
+            eventType: 'asr_chunk',
+            offline: !!(data.offlineDelta || data.offlineWhisper || data.engine === 'quran-asr-small'),
+          });
+        }
       }
       const it = [{ transcript: txt }];
       if (data && Array.isArray(data.alts)) {

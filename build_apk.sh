@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-mkdir -p assets/models assets/data
+mkdir -p assets/models assets/model assets/data
 
 if [ -f main.dart ]; then
   mkdir -p lib
@@ -99,6 +99,9 @@ python3 patch_manifest.py _build/android/app/src/main/AndroidManifest.xml
 
 cd _build
 flutter pub get
+mkdir -p assets/model
+echo "Downloading recite_quran streaming Zipformer-v3 neural model (~69 MB)..."
+dart run recite_quran:download_model || echo "WARNING: recite_quran:download_model skipped; on-demand/fallback remains available"
 RAW_RUN="${GITHUB_RUN_NUMBER:-10}"
 BUILD_NUM=$(( RAW_RUN < 10 ? 10 + RAW_RUN : RAW_RUN ))
 echo "Building Release APK with applicationId=com.tasmee.tasmee versionCode=$BUILD_NUM..."
