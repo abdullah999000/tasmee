@@ -4117,11 +4117,11 @@ html[data-theme="light"] #tasmee-exit-toast {
       <div class="settings-sub-panel open" id="sub-error-sound-haptics">
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>🔔 صوت جرس تنبيه عالي وواضح عند الخطأ</span>
-          <input type="checkbox" id="cfg-bell-sound" checked style="width:18px;height:18px;accent-color:var(--accent-green);">
+          <input type="checkbox" id="cfg-bell-sound" checked onchange="try{localStorage.setItem('tasmee_bell_sound',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>📳 اهتزاز الهاتف (Haptic Vibration) عند الخطأ</span>
-          <input type="checkbox" id="cfg-vibrate-on-error" checked style="width:18px;height:18px;accent-color:var(--accent-green);">
+          <input type="checkbox" id="cfg-vibrate-on-error" checked onchange="try{localStorage.setItem('tasmee_vibrate_on_error',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>⏸ التوقف الإجباري عند الخطأ حتى تصحيحه</span>
@@ -5913,7 +5913,14 @@ function triggerErrorVibration() {
 function playBellAlert(type) {
   const bellCfg = document.getElementById('cfg-bell-sound');
   if (bellCfg && !bellCfg.checked) return;
-  if (type === 'err') totalBellChimesPlayed++;
+  if (type === 'err') {
+    totalBellChimesPlayed++;
+    try {
+      if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+        Tasmee.postMessage(JSON.stringify({ a: 'bell_err' }));
+      }
+    } catch (_) {}
+  }
   try {
     const ctx = getAudioContext();
     const t = ctx.currentTime;
@@ -7943,6 +7950,16 @@ function isIdghamMergedMatch(spokenToken, w1, w2) {
     const assimilated = a.slice(0, -1) + b;
     if (isWordMatch(sp, assimilated)) return true;
   }
+  // Iqlab (الإقلاب): Noon Sakinah before Baa -> pronounced as Meem (من بعد -> ممبعد / مبعد)
+  if (a.endsWith('ن') && a.length >= 2 && b.startsWith('ب')) {
+    const iqlabFull = a.slice(0, -1) + 'م' + b;
+    const iqlabShort = a.slice(0, -1) + b;
+    if (isWordMatch(sp, iqlabFull) || isWordMatch(sp, iqlabShort)) return true;
+  }
+  // Idgham Shafawi (إدغام شفوي): Meem Sakinah + Meem (لهم مغفرة -> لهمغفرة)
+  if (a.endsWith('م') && b.startsWith('م')) {
+    if (isWordMatch(sp, a + b.slice(1))) return true;
+  }
   return false;
 }
 
@@ -8304,9 +8321,13 @@ function isFreshStart() {
 const BELL_MAX_PER_WORD = 3;
 let bellBusyUntil = 0;
 function ringErrorBellForMany(page, idxs) {
-  const fresh = idxs.filter(k => !bellRingCount[page + ':' + k]);
+  const _nowRing = Date.now();
+  const fresh = idxs.filter(k => {
+    const prevTs = bellRingCount[page + ':' + k] || 0;
+    return !prevTs || (_nowRing - prevTs >= 2500);
+  });
   if (!fresh.length) return false;
-  fresh.forEach(k => { bellRingCount[page + ':' + k] = BELL_MAX_PER_WORD; });
+  fresh.forEach(k => { bellRingCount[page + ':' + k] = _nowRing; });
   const now = Date.now();
   const startAt = Math.max(now, bellBusyUntil);           // never overlap two bursts: queue behind the previous one
   const stepMs = 260;
@@ -12005,6 +12026,11 @@ window.__onReciteQuranWord = function(ev) {
       }
 
       if (isGreen) {
+        if (window.__pendingReciteRedTimer && window.__pendingReciteRedIdx === targetIdx) {
+          clearTimeout(window.__pendingReciteRedTimer);
+          window.__pendingReciteRedTimer = null;
+          window.__pendingReciteRedIdx = -1;
+        }
         if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
         if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
           wordStates[targetIdx] = 'ok';
@@ -12039,14 +12065,53 @@ window.__onReciteQuranWord = function(ev) {
           finishPageOrAdvance(true);
         }
       } else if (isRed) {
-        if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
-        if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
-        if (typeof triggerMistakeOnCurrentWord === 'function') {
-          triggerMistakeOnCurrentWord(ev.spoken || '', 'substitution');
+        const _wordObj = currentWordList[targetIdx];
+        const _nextObj = targetIdx + 1 < currentWordList.length ? currentWordList[targetIdx + 1] : null;
+        const _prevObj = targetIdx > 0 ? currentWordList[targetIdx - 1] : null;
+        const _tajweedMeta = window.__analyzeWordTajweedAndWaqf(_wordObj, _nextObj, _prevObj);
+
+        const _commitReciteMistake = () => {
+          window.__pendingReciteRedTimer = null;
+          window.__pendingReciteRedIdx = -1;
+          // If the word was already confirmed green during the confirmation window, cancel false alarm!
+          if (typeof wordStates !== 'undefined' && wordStates[targetIdx] === 'ok') return;
+          if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
+          if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
+          if (typeof triggerMistakeOnCurrentWord === 'function') {
+            triggerMistakeOnCurrentWord(ev.spoken || '', 'substitution');
+          } else {
+            if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
+            if (typeof recordUserMistake === 'function') recordUserMistake(_wordObj, targetIdx, ev.spoken || '');
+            if (typeof playBellAlert === 'function') playBellAlert('err');
+            if (typeof triggerErrorVibration === 'function') triggerErrorVibration();
+            if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+          }
+          // If Stop-on-Error is ON, lock native recite_quran back onto this exact mistaken word!
+          if (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory &&
+              window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+            try {
+              window.Tasmee.postMessage(JSON.stringify({
+                a: 'halt_on_error',
+                surah: s || (_wordObj && _wordObj.s) || 1,
+                ayah: a || (_wordObj && _wordObj.a) || 1,
+                wordInAyah: wInAyah >= 0 ? wInAyah : 0
+              }));
+            } catch (_) {}
+          }
+        };
+
+        // Per Tarteel PDF Sec 13.2/13.3 & 16.3: defer transient red on Tajweed/Waqf words (450ms)
+        // so valid Madd (4-6 harakat), Ghunnah, Idgham, Ikhfa, Iqlab, Qalqalah, Tafkheem, or Waqf breath
+        // never triggers a false alarm, while real errors still fire immediately after confirmation!
+        if (window.__pendingReciteRedTimer) {
+          clearTimeout(window.__pendingReciteRedTimer);
+          window.__pendingReciteRedTimer = null;
+        }
+        if (_tajweedMeta.hasTajweedOrWaqf && !ev.forceImmediate) {
+          window.__pendingReciteRedIdx = targetIdx;
+          window.__pendingReciteRedTimer = setTimeout(_commitReciteMistake, 450);
         } else {
-          if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
-          if (typeof recordUserMistake === 'function') recordUserMistake(currentWordList[targetIdx], targetIdx, ev.spoken || '');
-          if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+          _commitReciteMistake();
         }
       } else {
         // Neutral words intentionally leave wordStates[targetIdx] unchanged (not ok, not wrong)
@@ -12076,7 +12141,80 @@ window.__onReciteQuranWord = function(ev) {
   } catch (_) {}
 };
 
+// O(1) Quranic Tajweed, Waqf & Ibtida, and Breathing Analyzer (per Tarteel PDF Sec 6, 13.2-13.4, 16.3, 16.5)
+window.__pendingReciteRedTimer = null;
+window.__pendingReciteRedIdx = -1;
+
+window.__classifyWaqfMark = function(txt) {
+  const t = String(txt || '');
+  if (t.includes('\u06D8')) return { type: 'lazim', validPause: true, label: 'وقف لازم (مـ)' };
+  if (t.includes('\u06D7')) return { type: 'awla_waqf', validPause: true, label: 'الوقف أولى (قلى)' };
+  if (t.includes('\u06DA')) return { type: 'jaiz', validPause: true, label: 'وقف جائز (ج)' };
+  if (t.includes('\u06D6')) return { type: 'awla_wasl', validPause: true, label: 'الوصل أولى (صلى)' };
+  if (t.includes('\u06DB')) return { type: 'muanaqah', validPause: true, label: 'وقف معانقة (ۛ)' };
+  if (t.includes('\u06DC')) return { type: 'saktah', validPause: true, label: 'سكتة لطيفة (س)' };
+  if (t.includes('\u06D9')) return { type: 'mamnu', validPause: false, label: 'وقف غير مناسب (لا)' };
+  return { type: 'none', validPause: false, label: '' };
+};
+
+window.__analyzeWordTajweedAndWaqf = function(wordObj, nextObj, prevObj) {
+  const txt = String((wordObj && (wordObj.t || wordObj.text)) || '');
+  const nxt = String((nextObj && (nextObj.t || nextObj.text)) || '');
+  const prv = String((prevObj && (prevObj.t || prevObj.text)) || '');
+  const rules = [];
+
+  // 1. Madd (Natural, Muttasil, Munfasil, Lazim, Aared)
+  if (/[\u0653\u0670آ]/.test(txt) || /[اوي][\u0652\u06E1]?[ءأإئؤ]/.test(txt)) {
+    rules.push('madd');
+  }
+  // 2. Ghunnah (Noon/Meem Mushaddadah or Tanween)
+  if (/[نم]\u0651/.test(txt) || /[\u064B\u064C\u064D]/.test(txt)) {
+    rules.push('ghunnah');
+  }
+  // 3. Idgham / Ikhfa / Iqlab / Meem Sakinah across word boundary
+  const bare = txt.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+  const nxtBare = nxt.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+  if ((bare.endsWith('ن') || /[\u064B\u064C\u064D]/.test(txt)) && nxtBare) {
+    if (/^[يرملون]/.test(nxtBare)) rules.push('idgham');
+    else if (nxtBare.startsWith('ب')) rules.push('iqlab');
+    else if (/^[تثجدذزسشصضطظفقك]/.test(nxtBare)) rules.push('ikhfa');
+  }
+  if (bare.endsWith('م') && nxtBare && /^[مب]/.test(nxtBare)) {
+    rules.push('meem_sakinah');
+  }
+  // 4. Qalqalah (ق ط ب ج د with sukoon or at end of word/Waqf)
+  if (/[قطبجد][\u0652\u06E1]/.test(txt) || /[قطبجد]$/.test(bare)) {
+    rules.push('qalqalah');
+  }
+  // 5. Tafkheem / Tarqeeq (Raa and Lam Al-Jalalah)
+  if (bare.includes('ر') || bare.includes('الله') || bare.includes('لله')) {
+    rules.push('tafkheem_tarqeeq');
+  }
+  // 6. Waqf & Ibtida (current, previous, or next pause mark, or end of Ayah)
+  const waqfCur = window.__classifyWaqfMark(txt);
+  const waqfNxt = window.__classifyWaqfMark(nxt);
+  const waqfPrv = window.__classifyWaqfMark(prv);
+  const isEndOfAyah = !!(nextObj && wordObj && Number(nextObj.a || 0) !== Number(wordObj.a || 0));
+  const atValidWaqf = waqfCur.validPause || waqfNxt.validPause || waqfPrv.validPause || isEndOfAyah;
+  if (atValidWaqf) rules.push('waqf_valid');
+
+  return {
+    rules,
+    waqf: waqfCur.type !== 'none' ? waqfCur : waqfNxt,
+    atValidWaqf,
+    hasTajweedOrWaqf: rules.length > 0,
+  };
+};
+
 window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const _sb = localStorage.getItem('tasmee_bell_sound');
+    const _bEl = document.getElementById('cfg-bell-sound');
+    if (_sb !== null && _bEl) _bEl.checked = (_sb === '1');
+    const _sv = localStorage.getItem('tasmee_vibrate_on_error');
+    const _vEl = document.getElementById('cfg-vibrate-on-error');
+    if (_sv !== null && _vEl) _vEl.checked = (_sv === '1');
+  } catch (_) {}
   if (window.TasmeeAsrDiagnostics) window.TasmeeAsrDiagnostics.render();
   if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
     window.Tasmee.postMessage(JSON.stringify({ a: 'model_status' }));

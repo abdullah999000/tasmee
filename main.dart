@@ -55,6 +55,8 @@ class _HomeState extends State<Home> {
   final WhisperController _whisper = WhisperController();
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _localPlayer = AudioPlayer();
+  final AudioPlayer _bellPlayer = AudioPlayer();
+  Uint8List? _errBellWavBytes;
 
   bool _sttReady = false;
   bool _want = false;
@@ -454,6 +456,7 @@ class _HomeState extends State<Home> {
     _stateSub?.cancel();
     _doneSub?.cancel();
     _localPlayer.dispose();
+    _bellPlayer.dispose();
     _recorder.dispose();
     try { _whisper.releaseModel(); } catch (_) {}
     WakelockPlus.disable();
@@ -497,7 +500,14 @@ class _HomeState extends State<Home> {
       } else if (act == 'hint') {
         _currentPromptHint = (o['prompt']?.toString() ?? '').trim();
       } else if (act == 'vibrate_err') {
-        HapticFeedback.mediumImpact();
+        _triggerNativeErrorVibration();
+      } else if (act == 'bell_err') {
+        _playNativeErrorBell();
+      } else if (act == 'halt_on_error') {
+        final sNum = (o['surah'] is num) ? (o['surah'] as num).toInt() : _reciteActiveSurah;
+        final aNum = (o['ayah'] is num) ? (o['ayah'] as num).toInt() : _reciteStartAyah;
+        final wNum = (o['wordInAyah'] is num) ? (o['wordInAyah'] as num).toInt() : 0;
+        _haltReciteOnMistakeWord(sNum, aNum, wNum);
       } else if (act == 'get_page') {
         final p = (o['p'] is num) ? (o['p'] as num).toInt() : 0;
         final reqId = o['reqId']?.toString() ?? '';
@@ -738,6 +748,64 @@ class _HomeState extends State<Home> {
     });
   }
 
+  Uint8List _buildErrorBellWavBytes() {
+    if (_errBellWavBytes != null) return _errBellWavBytes!;
+    const int sampleRate = 16000;
+    const int numSamples = 2880; // 180ms crisp dual-tone chime
+    final pcm = Uint8List(numSamples * 2);
+    final bd = ByteData.sublistView(pcm);
+    for (int i = 0; i < numSamples; i++) {
+      final t = i / sampleRate;
+      final env = math.exp(-t * 14.0) * (i < 160 ? (i / 160.0) : 1.0);
+      final sig = (0.62 * math.sin(2 * math.pi * 659.25 * t) +
+              0.30 * math.sin(2 * math.pi * 987.77 * t)) *
+          env;
+      final s16 = (sig * 28000.0).round().clamp(-32767, 32767);
+      bd.setInt16(i * 2, s16, Endian.little);
+    }
+    _errBellWavBytes = _wrapPcm16AsWav(pcm, sampleRate: sampleRate, channels: 1);
+    return _errBellWavBytes!;
+  }
+
+  Future<void> _playNativeErrorBell() async {
+    try {
+      await _bellPlayer.setAudioContext(AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.assistanceSonification,
+          audioFocus: AndroidAudioFocus.none,
+        ),
+      ));
+      await _bellPlayer.stop();
+      await _bellPlayer.play(BytesSource(_buildErrorBellWavBytes()), volume: 0.95);
+    } catch (_) {
+      try { await SystemSound.play(SystemSoundType.alert); } catch (_) {}
+    }
+  }
+
+  Future<void> _triggerNativeErrorVibration() async {
+    try {
+      await HapticFeedback.heavyImpact();
+      Future.delayed(const Duration(milliseconds: 85), () {
+        try { HapticFeedback.vibrate(); } catch (_) {}
+      });
+    } catch (_) {
+      try { await HapticFeedback.vibrate(); } catch (_) {}
+    }
+  }
+
+  void _haltReciteOnMistakeWord(int surah, int ayah, int wordInAyah) {
+    if (!_usingReciteQuran || _reciteTracker == null) return;
+    try {
+      _reciteAudio?.clearBuffer();
+      try { (_reciteTracker as dynamic).resetBuffer(); } catch (_) {}
+      if (surah >= 1 && surah <= 114) _reciteActiveSurah = surah;
+      _tryJumpReciteToStartPosition(_reciteActiveSurah, ayah > 0 ? ayah : 1, wordInAyah >= 0 ? wordInAyah : 0);
+    } catch (_) {}
+  }
+
   Future<void> _clearReciteSentinelNow() async {
     if (_reciteSentinelClearedThisRun) return;
     _reciteSentinelClearedThisRun = true;
@@ -793,10 +861,7 @@ class _HomeState extends State<Home> {
       await repo.loadSurahAsync(surahNumber);
       final tracker = rq.ReciteQuran(
         repository: repo,
-        config: const rq.TrackerConfig(
-          enableEarlyMatching: true,
-          enableAutoReanchor: true,
-        ),
+        config: rq.TrackerConfig.dictation(),
         isTajweed: false,
       );
       await tracker.initialize();
