@@ -802,8 +802,8 @@ class _HomeState extends State<Home> {
         _reciteLastEventMs = nowMs;
         _js('recite_word', {
           'wordId': event.wordId.toString(),
-          'green': event.isGreen,
-          'yellow': event.isYellow,
+          'green': !event.isRed,
+          'yellow': false,
           'red': event.isRed,
           'surah': _reciteActiveSurah,
           'latencyMs': deltaMs,
