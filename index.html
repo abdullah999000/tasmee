@@ -3698,7 +3698,7 @@ html[data-theme="light"] #tasmee-exit-toast {
           </button>
 
           <!-- 4. Stop-on-Error Mandatory vs Continuous Mode Toggle -->
-          <button class="circle-tool-btn stop-active" id="btn-toggle-stop-mode" onclick="toggleStopOnErrorMode()" title="وضع التوقف الإجباري عند الخطأ مفعّل (اضغط للتبديل للمتابعة المستمرة)">
+          <button class="circle-tool-btn stop-active" id="btn-toggle-stop-mode" aria-label="Stop on Error – التوقف عند الخطأ" onclick="toggleStopOnErrorMode()" title="وضع التوقف الإجباري عند الخطأ مفعّل (اضغط للتبديل للمتابعة المستمرة)">
             <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
           </button>
         </div>
@@ -12009,6 +12009,7 @@ window.__onReciteQuranWord = function(ev) {
     }
 
     if (targetIdx >= 0 && targetIdx < currentWordList.length) {
+      const _wasAlreadyLocked = (typeof startLocked !== 'undefined' && !!startLocked);
       if (typeof startLocked !== 'undefined') startLocked = true;
       const _stopMand = (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory);
       const _hasHalt = (typeof haltError !== 'undefined' && haltError);
@@ -12026,20 +12027,87 @@ window.__onReciteQuranWord = function(ev) {
       }
 
       if (isGreen) {
-        // Cancel pending deferred red if this word confirmed green OR if next word confirmed green across an Idgham/Iqlab/Waqf boundary!
-        if (window.__pendingReciteRedTimer && (window.__pendingReciteRedIdx === targetIdx ||
-            (window.__pendingReciteRedIsBoundary && targetIdx === window.__pendingReciteRedIdx + 1))) {
-          clearTimeout(window.__pendingReciteRedTimer);
-          window.__pendingReciteRedTimer = null;
-          if (targetIdx === window.__pendingReciteRedIdx + 1 && typeof wordStates !== 'undefined' && wordStates[window.__pendingReciteRedIdx] === 'pending') {
-            wordStates[window.__pendingReciteRedIdx] = 'ok';
+        // 1. Resolve any pending uncertain_wait red timer using context of the confirmed green word!
+        if (window.__pendingReciteRedTimer) {
+          const _pIdx = window.__pendingReciteRedIdx;
+          if (_pIdx === targetIdx) {
+            clearTimeout(window.__pendingReciteRedTimer);
+            window.__pendingReciteRedTimer = null;
+            window.__pendingReciteRedIdx = -1;
+            window.__pendingReciteRedIsBoundary = false;
+          } else if (targetIdx === _pIdx + 1) {
+            clearTimeout(window.__pendingReciteRedTimer);
+            window.__pendingReciteRedTimer = null;
+            if (window.__pendingReciteRedIsBoundary) {
+              // Idgham/Iqlab/Ikhfa/Waqf/low-signal assimilation: cancel false alarm and mark ok!
+              if (typeof wordStates !== 'undefined' && wordStates[_pIdx] === 'pending') wordStates[_pIdx] = 'ok';
+              window.__pendingReciteRedIdx = -1;
+              window.__pendingReciteRedIsBoundary = false;
+            } else {
+              // Plain non-boundary word skipped -> confirmed TRUE OMISSION!
+              window.__pendingReciteRedIdx = -1;
+              window.__pendingReciteRedIsBoundary = false;
+              if (typeof currentWordIndex !== 'undefined') currentWordIndex = _pIdx;
+              if (typeof triggerMistakeOnCurrentWord === 'function') {
+                triggerMistakeOnCurrentWord(ev.spoken || '', 'omission');
+              } else if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
+                wordStates[_pIdx] = 'wrong';
+              }
+              if (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory) {
+                const _omObj = currentWordList[_pIdx];
+                if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+                  try {
+                    window.Tasmee.postMessage(JSON.stringify({
+                      a: 'halt_on_error',
+                      surah: s || (_omObj && _omObj.s) || 1,
+                      ayah: a || (_omObj && _omObj.a) || 1,
+                      wordInAyah: Math.max(0, wInAyah - 1)
+                    }));
+                  } catch (_) {}
+                }
+                return;
+              }
+            }
           }
-          window.__pendingReciteRedIdx = -1;
-          window.__pendingReciteRedIsBoundary = false;
         }
-        // Valid Ibtida repetition (1-3 words before cursor after breathing/Waqf): never count as error!
-        if (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && (currentWordIndex - targetIdx) <= 3 &&
-            ((ev.recentSilenceMs || 0) >= 300 || (Date.now() - (window.__lastBreathOrWaqfTs || 0)) <= 4500)) {
+        // 2. Direct jump over 1-2 unread plain words inside the same ayah -> TRUE OMISSION detection!
+        if (_wasAlreadyLocked && typeof currentWordIndex === 'number' && targetIdx > currentWordIndex && (targetIdx - currentWordIndex) <= 2 &&
+            typeof wordStates !== 'undefined' && Array.isArray(wordStates) && wordStates[currentWordIndex] === 'pending') {
+          const _skipObj = currentWordList[currentWordIndex];
+          const _tgtObj = currentWordList[targetIdx];
+          if (_skipObj && _tgtObj && !window.__isPauseToken(_skipObj) && Number(_skipObj.a || 0) === Number(_tgtObj.a || 0)) {
+            const _skipMeta = window.__analyzeWordTajweedAndWaqf(_skipObj, _tgtObj, currentWordIndex > 0 ? currentWordList[currentWordIndex - 1] : null);
+            const _skipIsBoundary = _skipMeta.rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah');
+            if (_skipIsBoundary) {
+              wordStates[currentWordIndex] = 'ok';
+            } else {
+              if (typeof triggerMistakeOnCurrentWord === 'function') {
+                triggerMistakeOnCurrentWord(ev.spoken || '', 'omission');
+              } else {
+                wordStates[currentWordIndex] = 'wrong';
+              }
+              if (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory) {
+                if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+                  try {
+                    window.Tasmee.postMessage(JSON.stringify({
+                      a: 'halt_on_error',
+                      surah: s || (_skipObj && _skipObj.s) || 1,
+                      ayah: a || (_skipObj && _skipObj.a) || 1,
+                      wordInAyah: Math.max(0, wInAyah - (targetIdx - currentWordIndex))
+                    }));
+                  } catch (_) {}
+                }
+                return;
+              }
+            }
+          }
+        }
+        // 3. Full-Ayah Restart (wordInAyah === 0 of current ayah) OR Valid Ibtida repetition (1-3 words after breathing/Waqf): 0 errors!
+        const _curAyahNum = (typeof currentWordIndex === 'number' && currentWordList[currentWordIndex]) ? Number(currentWordList[currentWordIndex].a || 0) : 0;
+        const _isFullAyahRestart = (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && wInAyah === 0 && a > 0 && a === _curAyahNum);
+        const _isValidIbtidaRepeat = (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && (currentWordIndex - targetIdx) <= 3 &&
+            ((ev.recentSilenceMs || 0) >= 300 || (Date.now() - (window.__lastBreathOrWaqfTs || 0)) <= 4500));
+        if (_isFullAyahRestart || _isValidIbtidaRepeat) {
           if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
           if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
           return;
@@ -12092,7 +12160,7 @@ window.__onReciteQuranWord = function(ev) {
           if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
           if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
           if (typeof triggerMistakeOnCurrentWord === 'function') {
-            triggerMistakeOnCurrentWord(ev.spoken || '', 'substitution');
+            triggerMistakeOnCurrentWord(ev.spoken || '', ev.errorType || 'substitution');
           } else {
             if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
             if (typeof recordUserMistake === 'function') recordUserMistake(_wordObj, targetIdx, ev.spoken || '');
@@ -12121,15 +12189,16 @@ window.__onReciteQuranWord = function(ev) {
           clearTimeout(window.__pendingReciteRedTimer);
           window.__pendingReciteRedTimer = null;
         }
-        const _deferMs = !ev.forceImmediate && typeof window.__computeAcousticDeferMs === 'function'
-          ? window.__computeAcousticDeferMs(_tajweedMeta, ev)
-          : (_tajweedMeta.hasTajweedOrWaqf && !ev.forceImmediate ? 450 : 0);
+        const _conf = !ev.forceImmediate && typeof window.__evaluateReciteConfidence === 'function'
+          ? window.__evaluateReciteConfidence(_tajweedMeta, ev)
+          : { state: 'confirmed_error', deferMs: 0, reason: 'forced', isBoundary: false };
+        const _deferMs = _conf.deferMs || 0;
         if ((ev.recentSilenceMs || 0) >= 350 || _tajweedMeta.atValidWaqf) {
           window.__lastBreathOrWaqfTs = Date.now();
         }
-        if (_deferMs > 0) {
+        if (_conf.state === 'uncertain_wait' && _deferMs > 0) {
           window.__pendingReciteRedIdx = targetIdx;
-          window.__pendingReciteRedIsBoundary = _tajweedMeta.rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'waqf_valid');
+          window.__pendingReciteRedIsBoundary = !!_conf.isBoundary;
           window.__pendingReciteRedTimer = setTimeout(_commitReciteMistake, _deferMs);
         } else {
           _commitReciteMistake();
@@ -12232,28 +12301,45 @@ window.__analyzeWordTajweedAndWaqf = function(wordObj, nextObj, prevObj) {
   };
 };
 
-window.__computeAcousticDeferMs = function(tajweedMeta, ev) {
+// 3-State Confidence Classifier (v1.0.8): distinguishes confirmed_error vs uncertain_wait
+window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
   const voiceMs = (ev && typeof ev.voiceActiveMs === 'number') ? ev.voiceActiveMs : 0;
   const silenceMs = (ev && typeof ev.recentSilenceMs === 'number') ? ev.recentSilenceMs : 0;
   const rms = (ev && typeof ev.chunkRms === 'number') ? ev.chunkRms : 0.05;
+  const latencyMs = (ev && typeof ev.latencyMs === 'number') ? ev.latencyMs : 0;
   const rules = (tajweedMeta && Array.isArray(tajweedMeta.rules)) ? tajweedMeta.rules : [];
+  const isTajweedBoundary = rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'waqf_valid');
 
-  // Long acoustic Madd / Ghunnah / Muqatta'ah stretch (PDF Sec 13.2: 300-600ms confirmation window)
+  // 1. Long acoustic Madd / Ghunnah / Muqatta'ah stretch (PDF Sec 13.2: 300-600ms confirmation window)
   if (rules.includes('muqattaah_madd') || (voiceMs >= 900 && (rules.includes('madd') || rules.includes('ghunnah')))) {
-    return 580;
+    return { state: 'uncertain_wait', deferMs: 580, reason: 'long_madd_or_muqattaah', isBoundary: isTajweedBoundary };
   }
-  // Active breathing pause or Waqf resumption (PDF Sec 13.4 & 16.3)
+  // 2. Active breathing pause or Waqf resumption (PDF Sec 13.4 & 16.3)
   if (silenceMs >= 350 || (tajweedMeta && tajweedMeta.atValidWaqf)) {
-    return 550;
+    return { state: 'uncertain_wait', deferMs: 550, reason: 'breath_or_waqf', isBoundary: true };
   }
-  // Boundary assimilation (Idgham / Ikhfa / Iqlab / Meem Sakinah) or soft Qalqalah/Waqf ending
+  // 3. Boundary assimilation (Idgham / Ikhfa / Iqlab / Meem Sakinah)
   if (rules.includes('idgham') || rules.includes('iqlab') || rules.includes('ikhfa') || rules.includes('meem_sakinah')) {
-    return 500;
+    return { state: 'uncertain_wait', deferMs: 500, reason: 'tajweed_boundary', isBoundary: true };
   }
-  if ((tajweedMeta && tajweedMeta.hasTajweedOrWaqf) || (rms > 0 && rms < 0.025)) {
-    return 420;
+  // 4. Incomplete pronunciation / slow start: never judge word wrong before articulation finishes!
+  if (voiceMs > 0 && voiceMs < 180) {
+    return { state: 'uncertain_wait', deferMs: 380, reason: 'incomplete_pronunciation', isBoundary: false };
   }
-  return 0; // Plain non-Tajweed word with no breath pause -> immediate real-error detection!
+  // 5. Temporary weak signal (low RMS) or high ASR latency jitter
+  if ((rms > 0 && rms < 0.032) || latencyMs > 650) {
+    return { state: 'uncertain_wait', deferMs: 420, reason: 'low_signal_or_jitter', isBoundary: true };
+  }
+  // 6. Other Tajweed words (Qalqalah / Tafkheem / Tarqeeq / short Madd/Ghunnah)
+  if (tajweedMeta && tajweedMeta.hasTajweedOrWaqf) {
+    return { state: 'uncertain_wait', deferMs: 420, reason: 'tajweed_acoustic', isBoundary: isTajweedBoundary };
+  }
+  // 7. Clear signal + completed articulation + plain non-Tajweed word -> confirmed immediate error!
+  return { state: 'confirmed_error', deferMs: 0, reason: 'clear_confirmed_error', isBoundary: false };
+};
+
+window.__computeAcousticDeferMs = function(tajweedMeta, ev) {
+  return window.__evaluateReciteConfidence(tajweedMeta, ev).deferMs;
 };
 
 window.addEventListener('DOMContentLoaded', () => {

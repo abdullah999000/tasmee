@@ -100,6 +100,7 @@ class _HomeState extends State<Home> {
   int _wavLoopEpoch = 0;
   int _pendingTranscribeJobs = 0;
   bool _offlineHeardAny = false;
+  bool _lastUnifiedOnlineFlag = false;
   bool _isTranscribingNow = false;
   String _currentPromptHint = '';
   WhisperLiveSession? _whisperSession;
@@ -618,36 +619,41 @@ class _HomeState extends State<Home> {
     _js('status', '⏳ [2] جارٍ فحص الاتصال وتجهيز المحرك...');
     final online = !preferOffline && await _hasInternetConnection();
 
-    // Unified ASR Routing:
-    // - Online: fast OS/Cloud SpeechRecognition (with automatic fallback to local Whisper if unavailable)
-    // - Offline Tier 1: True <250ms On-Device OS Streaming ASR (onDevice: true) when offline Arabic pack is installed
-    // - Offline Tier 2: 100% Standalone Bundled Whisper Tiny Quran GGML automatic fallback
-    if (online) {
-      _usingOfflineWhisper = false;
-      _usingOnDeviceStt = false;
-      if (await _ensureSttInitialized()) {
-        _js('status', '🌐 التسميع المتصل يعمل — اقرأ من أي موضع في الصفحة');
-        await _listenStt(onDevice: false);
-        return;
-      }
-    }
-
-    // Offline Tier 1: True Causal Streaming Zipformer-v3 via recite_quran (^1.0.5)
+    // Unified Local-First ASR Routing (v1.0.8):
+    // BOTH Online Mode and Offline Mode use the EXACT SAME local Quranic engine so word recognition,
+    // alignment, Tajweed/Waqf tolerance, error detection, Stop-on-Error, and alerts behave identically.
+    // - Tier 1 (Primary in BOTH Online & Offline): recite_quran (^1.0.5) Zipformer-v3 Streaming (3.46% WER)
+    // - Tier 2 (Automatic Local Fallback): Bundled Whisper Tiny Quran GGML (43.5 MB)
+    // - Tier 3 (Emergency Online-Only Last Resort): OS SpeechToText if both local engines fail
+    _lastUnifiedOnlineFlag = online;
     if (surahNumber >= 1 && surahNumber <= 114) _reciteActiveSurah = surahNumber;
     if (!await _isReciteSentinelTripped()) {
-      _js('status', '⚡ جارٍ تشغيل البث القرآني الحي دون إنترنت (recite_quran Zipformer-v3)...');
+      _js('status', online
+          ? '⚡ البث القرآني الموحّد نشط (Online • recite_quran Zipformer-v3)...'
+          : '⚡ البث القرآني الموحّد نشط دون إنترنت (Offline • recite_quran Zipformer-v3)...');
       final startedStreaming = await _startReciteQuranLive(_reciteActiveSurah);
       if (startedStreaming) return;
     }
 
-    // Offline Tier 2 (or fast model not yet downloaded): 100% Bundled Whisper Tiny Quran GGML
-    _js('status', '⏳ [3] جارٍ تجهيز نموذج التسميع المحلي المدمج (Whisper)...');
+    // Tier 2 (Unified Local Fallback): 100% Bundled Whisper Tiny Quran GGML
+    _js('status', '⏳ [3] جارٍ تجهيز المحرك الاحتياطي المحلي المدمج (Whisper)...');
     final modelPath = await _prepareBundledWhisperModel();
     if (modelPath != null) {
       final started = await _startOfflineWhisperLive(modelPath, promptHint);
       if (started) return;
     } else {
       _js('status', '⚠️ [3] ملف النموذج المحلي غير موجود داخل التطبيق');
+    }
+
+    // Tier 3 (Emergency Online Last Resort only if both local engines are unavailable)
+    if (online) {
+      _usingOfflineWhisper = false;
+      _usingOnDeviceStt = false;
+      if (await _ensureSttInitialized()) {
+        _js('status', '🌐 المحرك الاحتياطي المتصل يعمل — اقرأ من أي موضع في الصفحة');
+        await _listenStt(onDevice: false);
+        return;
+      }
     }
 
     _want = false;
@@ -865,7 +871,7 @@ class _HomeState extends State<Home> {
       await repo.loadSurahAsync(surahNumber);
       final tracker = rq.ReciteQuran(
         repository: repo,
-        config: rq.TrackerConfig.dictation(),
+        config: rq.TrackerConfig.normal(),
         isTajweed: false,
       );
       await tracker.initialize();
@@ -980,6 +986,7 @@ class _HomeState extends State<Home> {
           'recentSilenceMs': recentSilenceMs,
           'chunkRms': double.parse(_reciteLastChunkRms.toStringAsFixed(4)),
           'engine': 'recite_quran-zipformer-v3',
+          'unifiedMode': _lastUnifiedOnlineFlag ? 'online-unified-local' : 'offline-unified-local',
         });
       }, onError: (Object err) {
         if (_want && _usingReciteQuran && _reciteEpoch == myEpoch) {
