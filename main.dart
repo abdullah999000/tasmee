@@ -67,7 +67,11 @@ class _HomeState extends State<Home> {
   rq.AudioProcessor? _reciteAudio;
   StreamSubscription<dynamic>? _reciteWordSub;
   int _reciteActiveSurah = 1;
-  int _reciteLastEventMs = 0;
+  int _reciteStartAyah = 1;
+  int _reciteStartWordInAyah = 0;
+  int _reciteLastVoiceChunkMs = 0;
+  bool _reciteSentinelClearedThisRun = false;
+  Timer? _reciteSentinelClearTimer;
   int _reciteEpoch = 0;
   bool _onDeviceGotResult = false;
   bool _onDeviceFallbackTriggered = false;
@@ -442,6 +446,7 @@ class _HomeState extends State<Home> {
     _themeTimer?.cancel();
     _whisperPartialSub?.cancel();
     _chunkPcmSub?.cancel();
+    _reciteSentinelClearTimer?.cancel();
     _reciteWordSub?.cancel();
     try { _reciteAudio?.stop(); } catch (_) {}
     _posSub?.cancel();
@@ -466,13 +471,23 @@ class _HomeState extends State<Home> {
       final act = o['a']?.toString() ?? '';
       if (act == 'start') {
         final sNum = (o['surah'] is num) ? (o['surah'] as num).toInt() : _reciteActiveSurah;
+        final aNum = (o['ayah'] is num) ? (o['ayah'] as num).toInt() : 1;
+        final wNum = (o['wordInAyah'] is num) ? (o['wordInAyah'] as num).toInt() : 0;
         if (sNum >= 1 && sNum <= 114) _reciteActiveSurah = sNum;
+        _reciteStartAyah = aNum > 0 ? aNum : 1;
+        _reciteStartWordInAyah = wNum >= 0 ? wNum : 0;
         _start(
           promptHint: o['prompt']?.toString(),
           preferOffline: o['offline'] == true,
           surahNumber: _reciteActiveSurah,
         );
       } else if (act == 'reset_session') {
+        final sNum = (o['surah'] is num) ? (o['surah'] as num).toInt() : _reciteActiveSurah;
+        final aNum = (o['ayah'] is num) ? (o['ayah'] as num).toInt() : 1;
+        final wNum = (o['wordInAyah'] is num) ? (o['wordInAyah'] as num).toInt() : 0;
+        if (sNum >= 1 && sNum <= 114) _reciteActiveSurah = sNum;
+        _reciteStartAyah = aNum > 0 ? aNum : 1;
+        _reciteStartWordInAyah = wNum >= 0 ? wNum : 0;
         _resetLiveSession(
           promptHint: o['prompt']?.toString(),
           preferOffline: o['offline'] == true,
@@ -521,8 +536,10 @@ class _HomeState extends State<Home> {
       _reciteAudio?.clearBuffer();
       if (_reciteTracker != null) {
         try {
+          try { (_reciteTracker as dynamic).resetBuffer(); } catch (_) {}
           await _reciteRepo?.loadSurahAsync(_reciteActiveSurah);
           _reciteTracker!.setTargetSurah(_reciteActiveSurah);
+          _tryJumpReciteToStartPosition(_reciteActiveSurah, _reciteStartAyah, _reciteStartWordInAyah);
         } catch (_) {}
       }
     } else if (_usingOfflineWhisper) {
@@ -721,6 +738,33 @@ class _HomeState extends State<Home> {
     });
   }
 
+  Future<void> _clearReciteSentinelNow() async {
+    if (_reciteSentinelClearedThisRun) return;
+    _reciteSentinelClearedThisRun = true;
+    _reciteSentinelClearTimer?.cancel();
+    try {
+      final f = await _getReciteSentinelFile();
+      if (f != null && await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
+  void _tryJumpReciteToStartPosition(int surah, int ayah, int wordInAyah) {
+    if (ayah <= 1 && wordInAyah <= 0) return;
+    try {
+      final dynamic repoDyn = _reciteRepo;
+      final List<dynamic> words = repoDyn.getSurahWords(surah) as List<dynamic>;
+      for (int i = 0; i < words.length; i++) {
+        final dynamic w = words[i];
+        final int wa = (w.ayah as num?)?.toInt() ?? 0;
+        final int ww = (w.wordInAyah as num?)?.toInt() ?? 0;
+        if (wa == ayah && ww >= wordInAyah) {
+          (_reciteTracker as dynamic).jumpToWord(i);
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<bool> _initReciteQuranEngine({int surahNumber = 1, bool forceResetSentinel = false}) async {
     if (forceResetSentinel) {
       await _resetReciteSentinel();
@@ -732,11 +776,15 @@ class _HomeState extends State<Home> {
       try {
         await _reciteRepo!.loadSurahAsync(surahNumber);
         _reciteTracker!.setTargetSurah(surahNumber);
+        _tryJumpReciteToStartPosition(surahNumber, _reciteStartAyah, _reciteStartWordInAyah);
         return true;
       } catch (_) {}
     }
     final sentinel = await _getReciteSentinelFile();
     try {
+      // Keep sentinel active across init AND first audio decode!
+      // It will be cleared ONLY after the first decoded word or 4s of crash-free live streaming.
+      _reciteSentinelClearedThisRun = false;
       if (sentinel != null) {
         await sentinel.writeAsString(DateTime.now().toIso8601String(), flush: true);
       }
@@ -756,9 +804,7 @@ class _HomeState extends State<Home> {
       _reciteRepo = repo;
       _reciteTracker = tracker;
       _reciteAudio ??= rq.AudioProcessor();
-      if (sentinel != null && await sentinel.exists()) {
-        await sentinel.delete();
-      }
+      _tryJumpReciteToStartPosition(surahNumber, _reciteStartAyah, _reciteStartWordInAyah);
       _js('model_progress', {'pct': 100, 'msg': '✅ محرك البث الحي recite_quran جاهز 100% دون إنترنت!'});
       await _emitOfflineModelStatus(forceVerify: true);
       return true;
@@ -777,6 +823,7 @@ class _HomeState extends State<Home> {
         micStatus = await Permission.microphone.request();
       }
       if (!micStatus.isGranted) {
+        await _clearReciteSentinelNow();
         _want = false;
         _js('error', 'not-allowed');
         return true;
@@ -793,20 +840,66 @@ class _HomeState extends State<Home> {
       _usingReciteQuran = true;
       _usingOfflineWhisper = false;
       final myEpoch = ++_reciteEpoch;
-      _reciteLastEventMs = DateTime.now().millisecondsSinceEpoch;
+      _reciteLastVoiceChunkMs = DateTime.now().millisecondsSinceEpoch;
+
+      // Clear crash sentinel if 4s of live audio streaming completes without native crash
+      _reciteSentinelClearTimer?.cancel();
+      _reciteSentinelClearTimer = Timer(const Duration(seconds: 4), () {
+        if (_want && _usingReciteQuran && _reciteEpoch == myEpoch) {
+          _clearReciteSentinelNow();
+        }
+      });
 
       _reciteWordSub = _reciteTracker!.onWordMatched.listen((event) {
         if (!_want || !_usingReciteQuran || _reciteEpoch != myEpoch) return;
+        // First decoded word proves native ONNX + Isolate succeeded -> clear crash sentinel!
+        _clearReciteSentinelNow();
+
+        final dynamic ev = event;
+        final bool isRed = ev.isRed == true;
+        bool isNeutral = false;
+        try { isNeutral = ev.isNeutral == true; } catch (_) {}
+        final bool isGreen = !isRed && !isNeutral;
+
+        int? resolvedSurah = _reciteActiveSurah;
+        int? resolvedAyah;
+        int? resolvedWordInAyah;
+        int? totalWordsInAyah;
+        try {
+          final dynamic repoDyn = _reciteRepo;
+          final List<dynamic> sWords = repoDyn.getSurahWords(_reciteActiveSurah) as List<dynamic>;
+          final int wid = (ev.wordId is int) ? ev.wordId as int : (int.tryParse(ev.wordId.toString()) ?? -1);
+          if (wid >= 0 && wid < sWords.length) {
+            final dynamic w = sWords[wid];
+            resolvedSurah = (w.surah as num?)?.toInt() ?? _reciteActiveSurah;
+            resolvedAyah = (w.ayah as num?)?.toInt();
+            resolvedWordInAyah = (w.wordInAyah as num?)?.toInt();
+            if (resolvedAyah != null) {
+              int cnt = 0;
+              for (final dynamic sw in sWords) {
+                if (((sw.ayah as num?)?.toInt() ?? -1) == resolvedAyah) cnt++;
+              }
+              if (cnt > 0) totalWordsInAyah = cnt;
+            }
+          }
+        } catch (_) {}
+
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        final deltaMs = (nowMs - _reciteLastEventMs).clamp(0, 9999);
-        _reciteLastEventMs = nowMs;
+        final latencyMs = _reciteLastVoiceChunkMs > 0
+            ? (nowMs - _reciteLastVoiceChunkMs).clamp(0, 5000)
+            : 0;
+
         _js('recite_word', {
-          'wordId': event.wordId.toString(),
-          'green': !event.isRed,
+          'wordId': ev.wordId.toString(),
+          'surah': resolvedSurah,
+          'ayah': resolvedAyah,
+          'wordInAyah': resolvedWordInAyah,
+          'totalWordsInAyah': totalWordsInAyah,
+          'green': isGreen,
+          'neutral': isNeutral,
           'yellow': false,
-          'red': event.isRed,
-          'surah': _reciteActiveSurah,
-          'latencyMs': deltaMs,
+          'red': isRed,
+          'latencyMs': latencyMs,
           'engine': 'recite_quran-zipformer-v3',
         });
       }, onError: (Object err) {
@@ -821,8 +914,7 @@ class _HomeState extends State<Home> {
         onChunk: (Float32List chunk, bool isFinal) {
           if (!_want || !_usingReciteQuran || _reciteEpoch != myEpoch) return;
           final nowMs = DateTime.now().millisecondsSinceEpoch;
-          if (nowMs - _lastLevelEmitMs >= 160 && chunk.isNotEmpty) {
-            _lastLevelEmitMs = nowMs;
+          if (chunk.isNotEmpty) {
             double sumSq = 0.0;
             final step = chunk.length > 256 ? chunk.length ~/ 256 : 1;
             int cnt = 0;
@@ -832,14 +924,21 @@ class _HomeState extends State<Home> {
               cnt++;
             }
             final rms = cnt > 0 ? math.sqrt(sumSq / cnt) : 0.0;
-            final pct = (rms * 420.0).clamp(0.0, 100.0).round();
-            _js('level', pct);
+            if (rms > 0.015) {
+              _reciteLastVoiceChunkMs = nowMs;
+            }
+            if (nowMs - _lastLevelEmitMs >= 160) {
+              _lastLevelEmitMs = nowMs;
+              final pct = (rms * 420.0).clamp(0.0, 100.0).round();
+              _js('level', pct);
+            }
           }
           _reciteTracker?.feedAudioChunk(chunk, isFinal: isFinal);
         },
       );
       return true;
     } catch (e) {
+      await _clearReciteSentinelNow();
       _usingReciteQuran = false;
       _js('status', '⚠️ تعذّر تشغيل البث الحي ($e) — التبديل التلقائي إلى Whisper المدمج');
       return false;
@@ -848,6 +947,8 @@ class _HomeState extends State<Home> {
 
   Future<void> _stopReciteQuranLive() async {
     _reciteEpoch++;
+    _reciteSentinelClearTimer?.cancel();
+    await _clearReciteSentinelNow();
     await _reciteWordSub?.cancel();
     _reciteWordSub = null;
     try {

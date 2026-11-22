@@ -101,7 +101,14 @@ cd _build
 flutter pub get
 mkdir -p assets/model
 echo "Downloading recite_quran streaming Zipformer-v3 neural model (~69 MB)..."
-dart run recite_quran:download_model || echo "WARNING: recite_quran:download_model skipped; on-demand/fallback remains available"
+dart run recite_quran:download_model
+RECITE_ONNX="$(find assets/model -type f -name '*.onnx' 2>/dev/null | head -n 1 || true)"
+if [ -z "$RECITE_ONNX" ] || [ "$(stat -c%s "$RECITE_ONNX" 2>/dev/null || wc -c < "$RECITE_ONNX")" -lt 52428800 ]; then
+  echo "ERROR: recite_quran Zipformer-v3 ONNX model missing or smaller than 50 MB in assets/model/!" >&2
+  ls -la assets/model || true
+  exit 1
+fi
+echo "Verified recite_quran streaming model: $RECITE_ONNX ($(du -h "$RECITE_ONNX" | cut -f1))"
 RAW_RUN="${GITHUB_RUN_NUMBER:-10}"
 BUILD_NUM=$(( RAW_RUN < 10 ? 10 + RAW_RUN : RAW_RUN ))
 echo "Building Release APK with applicationId=com.tasmee.tasmee versionCode=$BUILD_NUM..."

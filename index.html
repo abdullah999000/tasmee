@@ -6,7 +6,7 @@
 <title>مُسمِّع – المصحف الشريف وتصحيح التلاوة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 
 <style>
 /* ==========================================================================
@@ -4892,12 +4892,12 @@ if (window.Tasmee) {
       const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
       const pv = document.getElementById('live-heard-preview');
       if (pv) pv.textContent = '⏳ [1] جارٍ تشغيل الميكروفون...';
-      Tasmee.postMessage(JSON.stringify({ a: 'start', surah: (typeof currentWordList !== 'undefined' && currentWordList.length && currentWordList[Math.max(0, typeof currentWordIndex === 'number' ? currentWordIndex : 0)] ? Number(currentWordList[Math.max(0, typeof currentWordIndex === 'number' ? currentWordIndex : 0)].s || 1) : 1), lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint }));
+      Tasmee.postMessage(JSON.stringify(Object.assign({ a: 'start' }, (typeof window.__getTasmeeActivePos === 'function' ? window.__getTasmeeActivePos() : { surah: 1, ayah: 1, wordInAyah: 0 }), { lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint })));
     }
     resetSession() {
       const promptHint = this._buildCleanPrompt();
       const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
-      Tasmee.postMessage(JSON.stringify({ a: 'reset_session', lang: this.lang, offline: isOfflineNow, prompt: promptHint }));
+      Tasmee.postMessage(JSON.stringify(Object.assign({ a: 'reset_session', lang: this.lang, offline: isOfflineNow, prompt: promptHint }, (typeof window.__getTasmeeActivePos === 'function' ? window.__getTasmeeActivePos() : { surah: 1, ayah: 1, wordInAyah: 0 }))));
     }
     stop() {
       Tasmee.postMessage(JSON.stringify({ a: 'stop' }));
@@ -4997,7 +4997,7 @@ window.__tasmeeHandleBack = function() {
       return 'handled';
     }
     if (isVis('modal-word-action')) { if (typeof closeWordModal === 'function') closeWordModal(); return 'handled'; }
-    if (isVis('modal-reciters-download')) { if (typeof closeRecitersDownloadModal === 'function') closeRecitersDownloadModal(); return 'handled'; }
+    if (isVis('modal-reciters') || isVis('modal-reciters-download')) { if (typeof closeRecitersDownloadModal === 'function') closeRecitersDownloadModal(); return 'handled'; }
     if (isVis('modal-settings')) { if (typeof closeSettings === 'function') closeSettings(); return 'handled'; }
     if (isVis('modal-search')) { if (typeof closeSearch === 'function') closeSearch(); return 'handled'; }
     if (isVis('modal-khatmah')) { if (typeof closeKhatmah === 'function') closeKhatmah(); return 'handled'; }
@@ -5020,7 +5020,7 @@ window.__tasmeeHandleBack = function() {
       return 'handled';
     }
     if (typeof isAudioPlaying !== 'undefined' && isAudioPlaying) {
-      if (typeof stopSheikhAudio === 'function') stopSheikhAudio();
+      if (typeof stopSheikhAudioPlayback === 'function') stopSheikhAudioPlayback(); else if (typeof stopSheikhAudio === 'function') stopSheikhAudio();
       return 'handled';
     }
     const hbOpen = document.getElementById('halt-alert-bar');
@@ -9697,6 +9697,7 @@ async function ensureFullQuranLoaded() {
     }
   } catch (_) {}
 
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return FULL_QURAN_CACHE;
   isFetchingFullQuran = true;
   try {
     // Fetch both Uthmani and Simple-Clean editions in parallel so ANY word in the 6236 ayahs matches immediately!
@@ -11660,9 +11661,12 @@ async function playSpecificAyahAudio(surahNum, ayahNum) {
     updateSheikhPlayerBarUI();
     applyAyahSelectionAndPlayingHighlights();
   }).catch(() => {
-    // Offline fallback using SpeechSynthesis if audio wasn't cached before going offline
+    // Offline fallback: notify clearly if uncached, and only use SpeechSynthesis if Arabic TTS voices exist
+    const _isOff = (typeof navigator !== 'undefined' && navigator.onLine === false);
     const ayahWords = currentWordList.filter(w => w.s === surahNum && w.a === ayahNum).map(w => w.t).join(' ');
-    if (ayahWords && 'speechSynthesis' in window) {
+    const _voices = ('speechSynthesis' in window && typeof window.speechSynthesis.getVoices === 'function') ? window.speechSynthesis.getVoices() : [];
+    const _hasArVoice = _voices.some(v => v && v.lang && v.lang.toLowerCase().startsWith('ar'));
+    if (ayahWords && 'speechSynthesis' in window && _hasArVoice) {
       try {
         const u = new SpeechSynthesisUtterance(ayahWords);
         u.lang = 'ar-SA';
@@ -11676,6 +11680,14 @@ async function playSpecificAyahAudio(surahNum, ayahNum) {
     isAudioPlaying = false;
     updateSheikhPlayerBarUI();
     applyAyahSelectionAndPlayingHighlights();
+    if (_isOff) {
+      const _t = document.getElementById('page-turn-toast'), _tx = document.getElementById('page-turn-toast-text');
+      if (_t && _tx) {
+        _tx.textContent = '📴 التلاوة غير محفوظة أوفلاين — نزّل القارئ أثناء الاتصال أو استخدم مجلد (Quran App Audio)';
+        _t.classList.add('show');
+        setTimeout(() => _t.classList.remove('show'), 3200);
+      }
+    }
   });
 
   // When the Sheikh finishes reading the current Ayah, automatically highlight and read the next Ayah!
@@ -11747,6 +11759,330 @@ try { const _ss = document.getElementById('cfg-smart-start'); if (_ss) _ss.check
   loadMushafPage(currentPage);
   setTimeout(() => ensureFullQuranLoaded(), 500);
 })();
+
+// =========================================================================
+// ACTIVE RECITE_QURAN (^1.0.5) LIVE BRIDGE + DIAGNOSTICS + MODEL STATUS UI
+// =========================================================================
+window.__lastAsrEngine = 'recite_quran-zipformer-v3';
+window.__lastAsrLatencyMs = null;
+
+window.__isPauseToken = function(item) {
+  if (!item) return true;
+  const txt = String(item.t || item.text || '').trim();
+  if (typeof isQuranPauseMark === 'function') return isQuranPauseMark(txt);
+  const stripped = txt.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\s]/g, '');
+  return stripped.length === 0;
+};
+
+// Build non-pause word indices for (surah, ayah) on current page, skipping leading Basmalah on s>1 ayah 1
+window.__getAyahRealWordIndices = function(list, surah, ayah) {
+  const raw = [];
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    const ds = Number(it.s || it.surah || 0);
+    const da = Number(it.a || it.ayah || 0);
+    if ((!surah || !ds || ds === surah) && da === ayah && !window.__isPauseToken(it)) {
+      raw.push(i);
+    }
+  }
+  // If non-Fatiha Ayah 1 begins with 4-word Basmalah in text source, exclude it to match recite_quran indexing
+  if (surah > 1 && ayah === 1 && raw.length > 4) {
+    const firstTxt = String(list[raw[0]].t || '').replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+    if (firstTxt.includes('بسم')) {
+      return raw.slice(4);
+    }
+  }
+  return raw;
+};
+
+window.__getTasmeeActivePos = function() {
+  try {
+    if (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList) && currentWordList.length) {
+      const idx = Math.max(0, Math.min(currentWordList.length - 1, (typeof currentWordIndex === 'number' ? currentWordIndex : 0)));
+      const item = currentWordList[idx];
+      const s = Number(item.s || item.surah || 1);
+      const a = Number(item.a || item.ayah || 1);
+      const realIdxs = window.__getAyahRealWordIndices(currentWordList, s, a);
+      let wInAyah = 0;
+      for (let k = 0; k < realIdxs.length; k++) {
+        if (realIdxs[k] <= idx) wInAyah = k;
+        else break;
+      }
+      return { surah: s, ayah: a, wordInAyah: wInAyah };
+    }
+  } catch (_) {}
+  return { surah: 1, ayah: 1, wordInAyah: 0 };
+};
+
+window.TasmeeAsrDiagnostics = (function() {
+  const KEY = 'tasmee_asr_diag_v1';
+  const MAX_ITEMS = 120;
+  let _cache = null;
+  let _saveTimer = null;
+  function load() {
+    if (_cache) return _cache;
+    try { _cache = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (_) { _cache = []; }
+    return _cache;
+  }
+  function scheduleSave() {
+    if (_saveTimer) return;
+    _saveTimer = setTimeout(() => {
+      _saveTimer = null;
+      try { localStorage.setItem(KEY, JSON.stringify((_cache || []).slice(-MAX_ITEMS))); } catch (_) {}
+    }, 600);
+  }
+  function log(entry) {
+    const arr = load();
+    arr.push({
+      ts: new Date().toISOString(),
+      engine: entry.engine || window.__lastAsrEngine || 'unknown',
+      expected: entry.expected || '',
+      recognized: entry.recognized || '',
+      latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : null,
+      eventType: entry.eventType || 'info',
+      offline: !!entry.offline,
+    });
+    if (arr.length > MAX_ITEMS) arr.splice(0, arr.length - MAX_ITEMS);
+    scheduleSave();
+    render();
+  }
+  function render() {
+    const arr = load();
+    const sumEl = document.getElementById('asr-diag-summary');
+    const listEl = document.getElementById('asr-diag-list');
+    const lats = arr.map(x => x.latencyMs).filter(v => typeof v === 'number' && v >= 0);
+    const avgLat = lats.length ? Math.round(lats.reduce((a, b) => a + b, 0) / lats.length) : '—';
+    const matches = arr.filter(x => x.eventType === 'match' || x.eventType === 'asr_chunk').length;
+    const errs = arr.filter(x => x.eventType === 'mismatch' || x.eventType === 'engine_fallback').length;
+    if (sumEl) {
+      sumEl.textContent = `المحرك: ${window.__lastAsrEngine || '—'} | تأخير التحديث بعد الصوت: ~${avgLat} ms (+تجميع 480ms) | تطابق: ${matches} | أخطاء: ${errs}`;
+    }
+    if (listEl) {
+      if (!arr.length) {
+        listEl.innerHTML = '<div style="opacity:0.7;">لا توجد سجلات تشخيص بعد — ابدأ التلاوة لتسجيل الأداء الفعلي.</div>';
+      } else {
+        listEl.innerHTML = arr.slice(-15).reverse().map(x => {
+          const t = (x.ts || '').slice(11, 19);
+          const lat = typeof x.latencyMs === 'number' ? ` (${x.latencyMs}ms)` : '';
+          return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.06);">[${t}] <b>${x.engine}</b>${lat}: «${(x.recognized || '').slice(0, 48)}»</div>`;
+        }).join('');
+      }
+    }
+  }
+  function clear() {
+    _cache = [];
+    try { localStorage.setItem(KEY, '[]'); } catch (_) {}
+    render();
+  }
+  function exportJson() { return JSON.stringify(load(), null, 2); }
+  return { log, render, clear, exportJson, load };
+})();
+
+window.openOfflineModelPanel = function() {
+  const btn = document.getElementById('btn-open-settings');
+  if (btn) btn.click();
+  setTimeout(() => {
+    const card = document.getElementById('offline-asr-model-card');
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.verifyOfflineModelIntegrity();
+  }, 150);
+};
+
+window.startOfflineModelDownload = function(force) {
+  const wrap = document.getElementById('offline-asr-progress-wrap');
+  const msg = document.getElementById('offline-asr-progress-msg');
+  if (wrap) wrap.style.display = 'block';
+  if (msg) msg.textContent = '⏳ جارٍ فحص وتجهيز محرك البث الحي (recite_quran)...';
+  if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+    window.Tasmee.postMessage(JSON.stringify({ a: 'download_offline_model', force: !!force }));
+  } else if (msg) {
+    msg.textContent = '⚠️ التجهيز متاح داخل تطبيق الهاتف فقط.';
+  }
+};
+
+window.verifyOfflineModelIntegrity = function() {
+  if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+    window.Tasmee.postMessage(JSON.stringify({ a: 'verify_offline_model' }));
+  }
+  if (window.TasmeeAsrDiagnostics) window.TasmeeAsrDiagnostics.render();
+};
+
+window.copyAsrDiagnosticsLog = function() {
+  const txt = window.TasmeeAsrDiagnostics ? window.TasmeeAsrDiagnostics.exportJson() : '[]';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).catch(() => {});
+  }
+  if (typeof window.__tasmeeShowExitToast === 'function') {
+    window.__tasmeeShowExitToast('تم نسخ سجل التشخيص');
+  }
+};
+
+window.clearAsrDiagnosticsLog = function() {
+  if (window.TasmeeAsrDiagnostics) window.TasmeeAsrDiagnostics.clear();
+};
+
+window.__onOfflineModelStatus = function(st) {
+  const badge = document.getElementById('offline-asr-badge');
+  const pathEl = document.getElementById('offline-asr-folder-path');
+  const topBtn = document.getElementById('btn-download-offline-asr');
+  if (pathEl && st.path) pathEl.textContent = '📂 ' + st.path;
+  if (st.ready && !st.sentinelTripped) {
+    window.__lastAsrEngine = 'recite_quran-zipformer-v3';
+    if (badge) {
+      badge.textContent = '✅ بث حي جاهز (Zipformer-v3)';
+      badge.style.background = 'rgba(52,211,153,0.2)';
+      badge.style.color = '#34d399';
+    }
+    if (topBtn) topBtn.style.color = '#34d399';
+  } else {
+    window.__lastAsrEngine = 'whisper-tiny-ar-quran';
+    if (badge) {
+      badge.textContent = st.sentinelTripped ? '⚠️ Whisper مدمج (حماية الجهاز)' : '🎙️ Whisper مدمج';
+      badge.style.background = 'rgba(251,191,36,0.18)';
+      badge.style.color = '#fbbf24';
+    }
+  }
+  if (window.TasmeeAsrDiagnostics) window.TasmeeAsrDiagnostics.render();
+};
+
+window.__onOfflineModelProgress = function(p) {
+  const wrap = document.getElementById('offline-asr-progress-wrap');
+  const bar = document.getElementById('offline-asr-progress-bar');
+  const msg = document.getElementById('offline-asr-progress-msg');
+  if (wrap) wrap.style.display = 'block';
+  if (bar && typeof p.pct === 'number' && p.pct >= 0) bar.style.width = Math.min(100, Math.max(0, p.pct)) + '%';
+  if (msg && p.msg) msg.textContent = String(p.msg);
+};
+
+// Native state-machine bridge: updates wordStates[] + currentWordIndex + refreshActiveViewsAfterStep()
+window.__onReciteQuranWord = function(ev) {
+  try {
+    if (!ev || typeof currentWordList === 'undefined' || !Array.isArray(currentWordList) || !currentWordList.length) return;
+    window.__lastAsrEngine = ev.engine || 'recite_quran-zipformer-v3';
+    if (typeof ev.latencyMs === 'number') window.__lastAsrLatencyMs = ev.latencyMs;
+
+    const isRed = !!ev.red;
+    const isNeutral = !!ev.neutral;
+    const isGreen = !!ev.green && !isRed && !isNeutral;
+    const s = Number(ev.surah || 0);
+    const a = Number(ev.ayah || 0);
+    const wInAyah = (typeof ev.wordInAyah === 'number') ? ev.wordInAyah : -1;
+    const totalInAyah = (typeof ev.totalWordsInAyah === 'number' && ev.totalWordsInAyah > 0) ? ev.totalWordsInAyah : 0;
+
+    let targetIdx = -1;
+    if (a > 0 && wInAyah >= 0) {
+      const realIdxs = window.__getAyahRealWordIndices(currentWordList, s, a);
+      if (realIdxs.length) {
+        // Cross-page split ayah alignment: if this page only holds the tail of a split ayah (starts at index 0)
+        // and totalWordsInAyah > realIdxs.length, align from the end of the ayah!
+        let localPos = wInAyah;
+        const startsAtPageTop = (realIdxs[0] === 0 || (realIdxs[0] === 1 && window.__isPauseToken(currentWordList[0])));
+        if (totalInAyah > realIdxs.length && startsAtPageTop) {
+          const tailOffset = totalInAyah - realIdxs.length;
+          localPos = wInAyah - tailOffset;
+        }
+        if (localPos >= 0 && localPos < realIdxs.length) {
+          targetIdx = realIdxs[localPos];
+        }
+      }
+    }
+
+    if (targetIdx >= 0 && targetIdx < currentWordList.length) {
+      if (typeof startLocked !== 'undefined') startLocked = true;
+      const _stopMand = (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory);
+      const _hasHalt = (typeof haltError !== 'undefined' && haltError);
+
+      // If halted on a mistake in mandatory-stop mode, block advancing past the halted word until corrected
+      if (_stopMand && _hasHalt) {
+        if (isGreen && targetIdx === haltError.index) {
+          haltError = null;
+          const _hb = document.getElementById('halt-alert-bar');
+          if (_hb) _hb.style.display = 'none';
+        } else if (targetIdx > haltError.index) {
+          if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+          return;
+        }
+      }
+
+      if (isGreen) {
+        if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
+        if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
+          wordStates[targetIdx] = 'ok';
+        }
+        if (typeof currentWordIndex !== 'undefined') {
+          currentWordIndex = Math.min(currentWordList.length, targetIdx + 1);
+          if (typeof advancePastPauseMarks === 'function') {
+            advancePastPauseMarks();
+          }
+        }
+        if (typeof refreshActiveViewsAfterStep === 'function') {
+          refreshActiveViewsAfterStep();
+        }
+        // Intra-page surah boundary (e.g. Juz Amma pages with 2-3 surahs): switch recite_quran target surah immediately!
+        if (typeof currentWordIndex === 'number' && currentWordIndex < currentWordList.length) {
+          const _nextW = currentWordList[currentWordIndex];
+          if (_nextW && _nextW.s && s > 0 && _nextW.s !== s && window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+            try {
+              window.Tasmee.postMessage(JSON.stringify({
+                a: 'reset_session',
+                lang: 'ar-SA',
+                offline: true,
+                surah: _nextW.s,
+                ayah: _nextW.a || 1,
+                wordInAyah: 0
+              }));
+            } catch (_) {}
+          }
+        }
+        // Auto-advance to next page cleanly when reaching end of page
+        if (typeof currentWordIndex === 'number' && currentWordIndex >= currentWordList.length && typeof finishPageOrAdvance === 'function') {
+          finishPageOrAdvance(true);
+        }
+      } else if (isRed) {
+        if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
+        if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
+        if (typeof triggerMistakeOnCurrentWord === 'function') {
+          triggerMistakeOnCurrentWord(ev.spoken || '', 'substitution');
+        } else {
+          if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
+          if (typeof recordUserMistake === 'function') recordUserMistake(currentWordList[targetIdx], targetIdx, ev.spoken || '');
+          if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+        }
+      } else {
+        // Neutral words intentionally leave wordStates[targetIdx] unchanged (not ok, not wrong)
+        if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
+        if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
+        if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+      }
+    }
+
+    const pv = document.getElementById('live-heard-preview');
+    if (pv) {
+      const icon = isRed ? '🔴' : (isNeutral ? '⚪' : '🟢');
+      const label = a > 0 ? `${s}:${a} (#${wInAyah + 1})` : String(ev.wordId || '');
+      pv.textContent = `${icon} بث حي (recite_quran) • ${label}`;
+    }
+
+    if (window.TasmeeAsrDiagnostics) {
+      window.TasmeeAsrDiagnostics.log({
+        engine: window.__lastAsrEngine,
+        expected: targetIdx >= 0 && currentWordList[targetIdx] ? String(currentWordList[targetIdx].t || '') : `${s}:${a}:${wInAyah}`,
+        recognized: `${isRed ? 'WRONG' : (isNeutral ? 'NEUTRAL' : 'OK')}:${s}:${a}:${wInAyah}`,
+        latencyMs: typeof ev.latencyMs === 'number' ? ev.latencyMs : null,
+        eventType: isRed ? 'mismatch' : (isNeutral ? 'neutral' : 'match'),
+        offline: true,
+      });
+    }
+  } catch (_) {}
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.TasmeeAsrDiagnostics) window.TasmeeAsrDiagnostics.render();
+  if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+    window.Tasmee.postMessage(JSON.stringify({ a: 'model_status' }));
+  }
+});
+
 </script>
 </body>
 </html>
