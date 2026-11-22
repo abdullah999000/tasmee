@@ -871,7 +871,7 @@ class _HomeState extends State<Home> {
       await repo.loadSurahAsync(surahNumber);
       final tracker = rq.ReciteQuran(
         repository: repo,
-        config: rq.TrackerConfig.normal(),
+        config: rq.TrackerConfig.easy(),
         isTajweed: false,
       );
       await tracker.initialize();
@@ -1280,10 +1280,12 @@ class _HomeState extends State<Home> {
             if (amp.current > -40.0) heardVoiceInSeg = true;
             final normPct = ((amp.current + 55.0) * 1.9).clamp(0.0, 100.0).round();
             _js('level', normPct);
-            // Fast low-latency flush once decoder is idle: ~360ms on breath pause, ~600ms continuous
+            // Natural-speed & Tajweed-safe adaptive flush:
+            // - Flushes on natural pause after >= 840ms (t >= 6) so words & Madds are never sliced mid-syllable
+            // - Continuous natural-speed phrase window ~1.44s (t >= 11) preserves multi-word & Muqatta'ah context
             if (!_isTranscribingNow) {
-              if (heardVoiceInSeg && t >= 2 && amp.current < -42.0) break;
-              if (t >= 4) break;
+              if (heardVoiceInSeg && t >= 6 && amp.current < -42.0) break;
+              if (t >= 11) break;
             }
           } catch (_) {}
         }

@@ -7741,18 +7741,18 @@ const SHORT_PARTICLES = new Set([
 
 // Huruf Muqatta'ah (الحروف المقطعة) spoken forms produced by Arabic Speech Recognition
 const MUQATTAAT_FORMS = {
-  'الم': ['الم', 'الفلامميم', 'الفلاميم', 'الفلالميم', 'الفم'],
-  'المص': ['المص', 'الفلامميمصاد', 'الفلاميمصاد'],
-  'الر': ['الر', 'الفلامرا', 'الفلامراء'],
-  'المر': ['المر', 'الفلامميمرا', 'الفلامميمراء'],
-  'كهيعص': ['كهيعص', 'كافهايعينصاد', 'كافهاياعينصاد', 'كافهايايعينصاد'],
-  'طه': ['طه', 'طاها'],
-  'طسم': ['طسم', 'طاسينميم'],
-  'طس': ['طس', 'طاسين'],
-  'يس': ['يس', 'ياسين'],
+  'الم': ['الم', 'الفلامميم', 'الفلاميم', 'الفلالميم', 'الفلميم', 'الفلامي', 'الاميم', 'الميم', 'لامميم', 'لاميم', 'الفم'],
+  'المص': ['المص', 'الفلامميمصاد', 'الفلاميمصاد', 'الفلاممصاد', 'الفلاميمص'],
+  'الر': ['الر', 'الفلامرا', 'الفلامراء', 'الفلارا', 'الامرا'],
+  'المر': ['المر', 'الفلامميمرا', 'الفلامميمراء', 'الفلاميمرا', 'الفلاميمراء'],
+  'كهيعص': ['كهيعص', 'كافهايعينصاد', 'كافهاياعينصاد', 'كافهايايعينصاد', 'كافهايعينص', 'كافهاءياءعينصاد'],
+  'طه': ['طه', 'طاها', 'طاءهاء', 'طاه'],
+  'طسم': ['طسم', 'طاسينميم', 'طاسيميم', 'طاسميم', 'طاءسينميم'],
+  'طس': ['طس', 'طاسين', 'طاءسين'],
+  'يس': ['يس', 'ياسين', 'ياءسين'],
   'ص': ['ص', 'صاد'],
-  'حم': ['حم', 'حاميم'],
-  'عسق': ['عسق', 'عينسينقاف'],
+  'حم': ['حم', 'حاميم', 'حاءميم'],
+  'عسق': ['عسق', 'عينسينقاف', 'عينسينق', 'عسقاف'],
   'ق': ['ق', 'قاف'],
   'ن': ['ن', 'نون']
 };
@@ -7763,6 +7763,16 @@ function isMuqattaahMatch(spokenJoined, expectedWord) {
   if (!forms) return false;
   const sp = normArabic(spokenJoined).replace(/\s+/g, '');
   return !!sp && forms.includes(sp);
+}
+
+// Progressive prefix check so long Tajweed Madd on Muqatta'ah (e.g. "ألف" before "لام ميم") waits instead of false-alarming
+function isMuqattaahPrefix(spokenJoined, expectedWord) {
+  const exp = normArabic(expectedWord).replace(/\s+/g, '');
+  const forms = MUQATTAAT_FORMS[exp];
+  if (!forms) return false;
+  const sp = normArabic(spokenJoined).replace(/\s+/g, '');
+  if (!sp || sp.length < 2) return false;
+  return forms.some(f => f.length > sp.length && f.startsWith(sp));
 }
 
 // Deep Uthmani-to-Phonetic Normalizer (handles واو الجماعة، الألف الخنجرية، الهمزات، المدود)
@@ -9074,9 +9084,15 @@ function processRecitedText(text, isFinal) {
     }
     const directMatch = directTier > 0;
     const compoundWithNext = !directMatch && nextToken && isWordMatch(token + nextToken, currentExpected);
+    const tok3 = (startIdx + i + 3 < tokens.length) ? tokens[startIdx + i + 3] : null;
+    const tok4 = (startIdx + i + 4 < tokens.length) ? tokens[startIdx + i + 4] : null;
     const compoundWithNext2 = !directMatch && !compoundWithNext && nextToken && nextNextToken &&
       (isMuqattaahMatch(token + nextToken + nextNextToken, currentExpected) ||
        (normArabic(currentExpected).length >= 7 && isWordMatch(token + nextToken + nextNextToken, currentExpected)));
+    const compoundWithNext3 = !directMatch && !compoundWithNext && !compoundWithNext2 && nextToken && nextNextToken && tok3 &&
+      isMuqattaahMatch(token + nextToken + nextNextToken + tok3, currentExpected);
+    const compoundWithNext4 = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithNext3 && nextToken && nextNextToken && tok3 && tok4 &&
+      isMuqattaahMatch(token + nextToken + nextNextToken + tok3 + tok4, currentExpected);
     const compoundWithPrev = !directMatch && !compoundWithNext && !compoundWithNext2 && prevToken && isWordMatch(prevToken + token, currentExpected);
     const splitTwoExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && nextExpected && (isWordMatch(token, currentExpected + nextExpected) || isIdghamMergedMatch(token, currentExpected, nextExpected));
     const splitThreeExpected = !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && nextExpected && nextNextExpected
@@ -9087,7 +9103,7 @@ function processRecitedText(text, isFinal) {
       !directMatch && !compoundWithNext && !compoundWithNext2 && !compoundWithPrev && !splitTwoExpected && !splitThreeExpected && !altMatch &&
       isRecognizerSlip(token, currentExpected, nextToken, nextExpected);
 
-    if (directMatch || compoundWithNext || compoundWithNext2 || compoundWithPrev || splitTwoExpected || splitThreeExpected || altMatch || verifiedSlip) {
+    if (directMatch || compoundWithNext || compoundWithNext2 || compoundWithNext3 || compoundWithNext4 || compoundWithPrev || splitTwoExpected || splitThreeExpected || altMatch || verifiedSlip) {
       clearTimeout(interimMistakeTimer);
       pendingMismatchFn = null;
       pendingMismatchMeta = null;
@@ -9114,6 +9130,8 @@ function processRecitedText(text, isFinal) {
       }
       if (compoundWithNext) i++;
       if (compoundWithNext2) i += 2;
+      if (compoundWithNext3) i += 3;
+      if (compoundWithNext4) i += 4;
       lastProcessedTokenCount = startIdx + i + 1;
       syncPrimaryAnchor();
       checkReplayResume();
@@ -9128,6 +9146,11 @@ function processRecitedText(text, isFinal) {
     if (isNoiseFragment(token, currentExpected)) {
       lastProcessedTokenCount = gi + 1;
       continue;
+    }
+    // ---- 1c. progressive Muqatta'ah hold (e.g. "ألف" / "ألف لام" while user stretches Madd on ﴿الم﴾) ----
+    if (!isFinal && (isMuqattaahPrefix(token, currentExpected) || (nextToken && isMuqattaahPrefix(token + nextToken, currentExpected)))) {
+      scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, true);
+      break;
     }
 
     // ---- 2a. returning to the Primary Anchor after a temporary excursion (blocked if strictly halted on an error) ----
@@ -12141,6 +12164,13 @@ window.__onReciteQuranWord = function(ev) {
           if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
           return;
         }
+        // If Ayah 1 is a single-word Muqatta'ah (e.g. ﴿الم﴾ in Aal-Imran) and Ayah 2 word 0 confirms green in Wasl after voice, mark Muqatta'ah ok!
+        if (targetIdx > 0 && typeof wordStates !== 'undefined' && wordStates[targetIdx - 1] === 'pending') {
+          const _prevMuqMeta = window.__analyzeWordTajweedAndWaqf(currentWordList[targetIdx - 1], currentWordList[targetIdx], null);
+          if (_prevMuqMeta.rules.includes('muqattaah_madd') && (ev.voiceActiveMs || 0) >= 400) {
+            wordStates[targetIdx - 1] = 'ok';
+          }
+        }
         if ((ev.recentSilenceMs || 0) >= 350) window.__lastBreathOrWaqfTs = Date.now();
         if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
         if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
@@ -12346,7 +12376,7 @@ window.__evaluateReciteConfidence = function(tajweedMeta, ev) {
 
   // 1. Long acoustic Madd / Ghunnah / Muqatta'ah stretch (PDF Sec 13.2: 300-600ms confirmation window)
   if (rules.includes('muqattaah_madd') || (voiceMs >= 900 && (rules.includes('madd') || rules.includes('ghunnah')))) {
-    return { state: 'uncertain_wait', deferMs: 580, reason: 'long_madd_or_muqattaah', isBoundary: isTajweedBoundary };
+    return { state: 'uncertain_wait', deferMs: 580, reason: 'long_madd_or_muqattaah', isBoundary: isTajweedBoundary || rules.includes('muqattaah_madd') };
   }
   // 2. Active breathing pause or Waqf resumption (PDF Sec 13.4 & 16.3)
   if (silenceMs >= 350 || (tajweedMeta && tajweedMeta.atValidWaqf)) {
