@@ -4128,6 +4128,10 @@ html[data-theme="light"] #tasmee-exit-toast {
           <input type="checkbox" id="cfg-verify-errors" checked onchange="window.__reciteVerifyEnabled=this.checked;try{localStorage.setItem('tasmee_verify_errors',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
+          <span>🔴 تعليم الكلمة بالأحمر عند التعثر (توقف التقدم أثناء استمرار القراءة)</span>
+          <input type="checkbox" id="cfg-stall-detect" checked onchange="window.__reciteStallEnabled=this.checked;try{localStorage.setItem('tasmee_stall_detect',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>⏸ التوقف الإجباري عند الخطأ حتى تصحيحه</span>
           <input type="checkbox" id="cfg-stop-on-error" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="if(stopOnErrorMandatory !== this.checked) toggleStopOnErrorMode();">
         </label>
@@ -4933,6 +4937,10 @@ if (window.Tasmee) {
     }
     if (type === 'recite_verify') {
       if (typeof window.__onReciteVerifyText === 'function') window.__onReciteVerifyText(data || {});
+      return;
+    }
+    if (type === 'recite_stall') {
+      if (typeof window.__onReciteStall === 'function') window.__onReciteStall(data || {});
       return;
     }
     if (type === 'model_progress') {
@@ -12317,6 +12325,7 @@ window.__verifySnaps = {};
 window.__lastVerifyInfo = null;
 
 window.__verifyNoteGreen = function(idx) {
+  window.__lastGreenTs = Date.now();
   const b = window.__verifyBuf;
   b.push(idx);
   if (b.length > 400) b.splice(0, b.length - 400);
@@ -12518,6 +12527,67 @@ window.__onReciteVerifyText = function(d) {
   } catch (_) { return null; }
 };
 
+// ==========================================================================
+// STALL DETECTOR (v1.0.13): the fast tracker never reports a wrong word, it just stops advancing.
+// Dart reports how long the reader kept SPEAKING (voiced audio, pauses reset it) since the last accepted word.
+// If the tracker cannot advance for >= 2.3 s of continuous speech (4.6 s on madd / muqattaah / waqf words)
+// the expected word is flagged red: colour + bell + vibration + mistakes bank, exactly like a real error.
+// ==========================================================================
+window.__reciteStallEnabled = true;
+window.__lastGreenTs = 0;
+window.__stallInfo = null;
+
+window.__postJumpToWord = function(idx) {
+  try {
+    const o = currentWordList[idx];
+    if (!o || !window.Tasmee || typeof window.Tasmee.postMessage !== 'function') return;
+    const list = window.__getAyahRealWordIndices(currentWordList, o.s || 0, o.a || 0);
+    let w = list.indexOf(idx);
+    if (w < 0) w = 0;
+    window.Tasmee.postMessage(JSON.stringify({ a: 'halt_on_error', surah: o.s || 1, ayah: o.a || 1, wordInAyah: w }));
+  } catch (_) {}
+};
+
+window.__onReciteStall = function(d) {
+  try {
+    if (!window.__reciteStallEnabled) return false;
+    if (typeof currentWordList === 'undefined' || !Array.isArray(currentWordList) || !currentWordList.length) return false;
+    if (typeof currentWordIndex !== 'number' || currentWordIndex >= currentWordList.length) return false;
+    if (typeof haltError !== 'undefined' && haltError) return false;      // already stopped on a mistake
+    if (window.__pendingReciteRedTimer) return false;                       // a tajweed-deferred red is pending
+    const voiced = Number((d && d.voicedMs) || 0);
+    let idx = currentWordIndex;
+    while (idx < currentWordList.length && window.__isPauseToken(currentWordList[idx])) idx++;
+    const obj = currentWordList[idx];
+    if (!obj || wordStates[idx] === 'wrong' || wordStates[idx] === 'ok') return false;
+    const nextObj = idx + 1 < currentWordList.length ? currentWordList[idx + 1] : null;
+    const prevObj = idx > 0 ? currentWordList[idx - 1] : null;
+    const meta = window.__analyzeWordTajweedAndWaqf(obj, nextObj, prevObj) || { rules: [] };
+    const rules = meta.rules || [];
+    const lenient = !!meta.atValidWaqf || rules.some(r => r === 'madd' || r === 'muqattaah_madd' || r === 'idgham' || r === 'ikhfa' || r === 'iqlab' || r === 'meem_sakinah');
+    const need = lenient ? 4600 : 2300;
+    const info = { voiced, need, idx, lenient, flagged: false };
+    window.__stallInfo = info;
+    if (voiced < need) return false;
+    if (Date.now() - (window.__lastGreenTs || 0) < 700) return false;     // tracker is progressing normally
+    const stopOn = (typeof stopOnErrorMandatory !== 'undefined' && !!stopOnErrorMandatory);
+    const ok = window.__flagRetroMistake(idx, '', 'substitution');
+    info.flagged = !!ok;
+    if (ok && !stopOn) {
+      // Skip-errors mode: leave the word red and let the tracker continue from the next word.
+      let nxt = idx + 1;
+      currentWordIndex = nxt;
+      if (typeof advancePastPauseMarks === 'function') advancePastPauseMarks();
+      nxt = currentWordIndex;
+      if (nxt < currentWordList.length) window.__postJumpToWord(nxt);
+      if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+    }
+    const pv = document.getElementById('live-heard-preview');
+    if (pv && ok) pv.textContent = '🔴 تعثّر: لم تُسمَع الكلمة «' + (obj.t || '') + '» صحيحة';
+    return !!ok;
+  } catch (_) { return false; }
+};
+
 // O(1) Quranic Tajweed, Waqf & Ibtida, and Breathing Analyzer (per Tarteel PDF Sec 6, 13.2-13.4, 16.3, 16.5)
 window.__pendingReciteRedTimer = null;
 window.__pendingReciteRedIdx = -1;
@@ -12642,6 +12712,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const _vf = localStorage.getItem('tasmee_verify_errors');
     const _vfEl = document.getElementById('cfg-verify-errors');
     if (_vf !== null) { window.__reciteVerifyEnabled = (_vf === '1'); if (_vfEl) _vfEl.checked = (_vf === '1'); }
+    const _sd = localStorage.getItem('tasmee_stall_detect');
+    const _sdEl = document.getElementById('cfg-stall-detect');
+    if (_sd !== null) { window.__reciteStallEnabled = (_sd === '1'); if (_sdEl) _sdEl.checked = (_sd === '1'); }
     const _sv = localStorage.getItem('tasmee_vibrate_on_error');
     const _vEl = document.getElementById('cfg-vibrate-on-error');
     if (_sv !== null && _vEl) _vEl.checked = (_sv === '1');

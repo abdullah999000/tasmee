@@ -139,60 +139,80 @@ for fname, is_kts in [("build.gradle.kts", True), ("build.gradle", False)]:
         if changed:
             open(gpath, "w", encoding="utf-8").write(g)
 
-# Patch MainActivity.kt with direct Android hardware Vibrator MethodChannel (bypasses MagicOS/Honor HapticFeedback mute)
+# Patch MainActivity.kt with a direct Android hardware Vibrator MethodChannel.
+# v1.0.13: since Android 11 the system SUPPRESSES vibration while the microphone is recording (the app records
+# the whole time it listens) unless the vibration is declared as an ALARM. HapticFeedback / plain vibrate()
+# therefore did nothing. Using AudioAttributes.USAGE_ALARM keeps it working during recording and ignores the
+# "touch vibration" system switch. VIBRATE is a normal permission: granted at install, no prompt for the user.
+KOTLIN_BODY = (
+    "import android.content.Context\n"
+    "import android.media.AudioAttributes\n"
+    "import android.os.Build\n"
+    "import android.os.VibrationEffect\n"
+    "import android.os.Vibrator\n"
+    "import android.os.VibratorManager\n"
+    "import io.flutter.embedding.android.FlutterActivity\n"
+    "import io.flutter.embedding.engine.FlutterEngine\n"
+    "import io.flutter.plugin.common.MethodChannel\n\n"
+    "class MainActivity : FlutterActivity() {\n"
+    "    private val VIBRATOR_CHANNEL = \"com.tasmee.tasmee/vibrator\"\n\n"
+    "    private fun tasmeeVibrator(): Vibrator? {\n"
+    "        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {\n"
+    "            val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager\n"
+    "            vm?.defaultVibrator\n"
+    "        } else {\n"
+    "            @Suppress(\"DEPRECATION\")\n"
+    "            getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator\n"
+    "        }\n"
+    "    }\n\n"
+    "    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {\n"
+    "        super.configureFlutterEngine(flutterEngine)\n"
+    "        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VIBRATOR_CHANNEL).setMethodCallHandler { call, result ->\n"
+    "            if (call.method == \"vibrate\") {\n"
+    "                val ms = (call.argument<Int>(\"ms\") ?: 180).toLong().coerceIn(40L, 600L)\n"
+    "                var done = false\n"
+    "                try {\n"
+    "                    val vibrator = tasmeeVibrator()\n"
+    "                    if (vibrator != null && vibrator.hasVibrator()) {\n"
+    "                        val attrs = AudioAttributes.Builder()\n"
+    "                            .setUsage(AudioAttributes.USAGE_ALARM)\n"
+    "                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)\n"
+    "                            .build()\n"
+    "                        val pattern = longArrayOf(0L, ms, 70L, ms)\n"
+    "                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n"
+    "                            @Suppress(\"DEPRECATION\")\n"
+    "                            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1), attrs)\n"
+    "                        } else {\n"
+    "                            @Suppress(\"DEPRECATION\")\n"
+    "                            vibrator.vibrate(pattern, -1, attrs)\n"
+    "                        }\n"
+    "                        done = true\n"
+    "                    }\n"
+    "                } catch (e: Exception) {\n"
+    "                    done = false\n"
+    "                }\n"
+    "                result.success(done)\n"
+    "            } else {\n"
+    "                result.notImplemented()\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
+
 kotlin_root = os.path.join(app_dir, "src", "main", "kotlin")
+patched_kt = False
 if os.path.isdir(kotlin_root):
     for r_dir, _, f_names in os.walk(kotlin_root):
         for fn in f_names:
             if fn == "MainActivity.kt":
                 kt_path = os.path.join(r_dir, fn)
                 kt = open(kt_path, encoding="utf-8").read()
-                if "com.tasmee.tasmee/vibrator" not in kt:
+                if "AudioAttributes.USAGE_ALARM" not in kt:
                     pkg_m = re.search(r'^package\s+([^\s]+)', kt, re.MULTILINE)
                     pkg_line = f"package {pkg_m.group(1)}\n\n" if pkg_m else ""
-                    new_kt = (
-                        pkg_line
-                        + "import android.content.Context\n"
-                        + "import android.os.Build\n"
-                        + "import android.os.VibrationEffect\n"
-                        + "import android.os.Vibrator\n"
-                        + "import android.os.VibratorManager\n"
-                        + "import io.flutter.embedding.android.FlutterActivity\n"
-                        + "import io.flutter.embedding.engine.FlutterEngine\n"
-                        + "import io.flutter.plugin.common.MethodChannel\n\n"
-                        + "class MainActivity : FlutterActivity() {\n"
-                        + "    private val VIBRATOR_CHANNEL = \"com.tasmee.tasmee/vibrator\"\n\n"
-                        + "    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {\n"
-                        + "        super.configureFlutterEngine(flutterEngine)\n"
-                        + "        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VIBRATOR_CHANNEL).setMethodCallHandler { call, result ->\n"
-                        + "            if (call.method == \"vibrate\") {\n"
-                        + "                val ms = (call.argument<Int>(\"ms\") ?: 180).toLong().coerceIn(40L, 600L)\n"
-                        + "                try {\n"
-                        + "                    val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {\n"
-                        + "                        val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager\n"
-                        + "                        vm?.defaultVibrator\n"
-                        + "                    } else {\n"
-                        + "                        @Suppress(\"DEPRECATION\")\n"
-                        + "                        getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator\n"
-                        + "                    }\n"
-                        + "                    if (vibrator != null && vibrator.hasVibrator()) {\n"
-                        + "                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {\n"
-                        + "                            vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))\n"
-                        + "                        } else {\n"
-                        + "                            @Suppress(\"DEPRECATION\")\n"
-                        + "                            vibrator.vibrate(ms)\n"
-                        + "                        }\n"
-                        + "                    }\n"
-                        + "                    result.success(true)\n"
-                        + "                } catch (e: Exception) {\n"
-                        + "                    result.success(false)\n"
-                        + "                }\n"
-                        + "            } else {\n"
-                        + "                result.notImplemented()\n"
-                        + "            }\n"
-                        + "        }\n"
-                        + "    }\n"
-                        + "}\n"
-                    )
-                    open(kt_path, "w", encoding="utf-8").write(new_kt)
-                    print(f"MainActivity.kt patched with native hardware Vibrator channel: {kt_path}")
+                    open(kt_path, "w", encoding="utf-8").write(pkg_line + KOTLIN_BODY)
+                    print(f"MainActivity.kt patched with ALARM-usage hardware Vibrator channel: {kt_path}")
+                patched_kt = True
+if not patched_kt:
+    print("WARNING: MainActivity.kt not found - native vibration channel NOT installed!", file=sys.stderr)

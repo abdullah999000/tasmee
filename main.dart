@@ -76,6 +76,11 @@ class _HomeState extends State<Home> {
   int _reciteSilenceStartMs = 0;
   int _reciteLastSilenceDurationMs = 0;
   double _reciteLastChunkRms = 0.0;
+  // v1.0.13 stall detector: voiced audio since the tracker last accepted a word. If the reader keeps
+  // speaking but the tracker cannot advance, the expected word was most likely read wrongly.
+  int _reciteVoicedSinceMatchMs = 0;
+  bool _reciteMatchedAny = false;
+  int _reciteLastStallEmitMs = 0;
   bool _reciteSentinelClearedThisRun = false;
   Timer? _reciteSentinelClearTimer;
   int _reciteEpoch = 0;
@@ -559,6 +564,8 @@ class _HomeState extends State<Home> {
     _chunkBuffer.clear();
     if (_usingReciteQuran) {
       _verifyReset();
+      _reciteVoicedSinceMatchMs = 0;
+      _reciteMatchedAny = false;
       _reciteAudio?.clearBuffer();
       if (_reciteTracker != null) {
         try {
@@ -826,6 +833,8 @@ class _HomeState extends State<Home> {
   void _haltReciteOnMistakeWord(int surah, int ayah, int wordInAyah) {
     if (!_usingReciteQuran || _reciteTracker == null) return;
     try {
+      _reciteVoicedSinceMatchMs = 0;
+      _reciteLastStallEmitMs = DateTime.now().millisecondsSinceEpoch;
       _reciteAudio?.clearBuffer();
       try { (_reciteTracker as dynamic).resetBuffer(); } catch (_) {}
       if (surah >= 1 && surah <= 114) _reciteActiveSurah = surah;
@@ -937,6 +946,9 @@ class _HomeState extends State<Home> {
       _reciteSilenceStartMs = 0;
       _reciteLastSilenceDurationMs = 0;
       _reciteLastChunkRms = 0.0;
+      _reciteVoicedSinceMatchMs = 0;
+      _reciteMatchedAny = false;
+      _reciteLastStallEmitMs = 0;
 
       // Clear crash sentinel if 4s of live audio streaming completes without native crash
       _reciteSentinelClearTimer?.cancel();
@@ -950,6 +962,8 @@ class _HomeState extends State<Home> {
         if (!_want || !_usingReciteQuran || _reciteEpoch != myEpoch) return;
         // First decoded word proves native ONNX + Isolate succeeded -> clear crash sentinel!
         _clearReciteSentinelNow();
+        _reciteVoicedSinceMatchMs = 0;
+        _reciteMatchedAny = true;
 
         final dynamic ev = event;
         final bool isRed = ev.isRed == true;
@@ -1028,7 +1042,9 @@ class _HomeState extends State<Home> {
             }
             final rms = cnt > 0 ? math.sqrt(sumSq / cnt) : 0.0;
             _reciteLastChunkRms = rms;
+            final int chunkMs = (chunk.length * 1000) ~/ _vSampleRate;
             if (rms > 0.015) {
+              _reciteVoicedSinceMatchMs += chunkMs;
               if (_reciteVoiceStartMs == 0) _reciteVoiceStartMs = nowMs;
               if (_reciteSilenceStartMs > 0) {
                 _reciteLastSilenceDurationMs = (nowMs - _reciteSilenceStartMs).clamp(0, 15000);
@@ -1040,6 +1056,13 @@ class _HomeState extends State<Home> {
               if (_reciteLastVoiceChunkMs > 0 && (nowMs - _reciteLastVoiceChunkMs) >= 280) {
                 _reciteVoiceStartMs = 0;
               }
+              // A real pause (>= 0.9 s) means the reader is thinking/breathing, not reading a wrong word.
+              if (nowMs - _reciteSilenceStartMs >= 900) _reciteVoicedSinceMatchMs = 0;
+            }
+            // Stall report: the page decides (it knows tajweed/madd words and the Stop-on-Error mode).
+            if (_reciteMatchedAny && _reciteVoicedSinceMatchMs >= 2300 && (nowMs - _reciteLastStallEmitMs) >= 600) {
+              _reciteLastStallEmitMs = nowMs;
+              _js('recite_stall', {'voicedMs': _reciteVoicedSinceMatchMs});
             }
             if (nowMs - _lastLevelEmitMs >= 160) {
               _lastLevelEmitMs = nowMs;
@@ -1087,7 +1110,7 @@ class _HomeState extends State<Home> {
       return;
     }
     final bool pauseCut = _vVoiceSamples >= (_vSampleRate * 12 ~/ 10) && _vTrailSilenceSamples >= (_vSampleRate * 7 ~/ 10);
-    final bool maxCut = _vSamples >= _vSampleRate * 8;
+    final bool maxCut = _vSamples >= _vSampleRate * 14;
     if (pauseCut || maxCut) _verifyFlush();
   }
 
@@ -1120,6 +1143,13 @@ class _HomeState extends State<Home> {
   Future<void> _verifyTranscribe(int segId, Uint8List pcm, int epoch) async {
     try {
       if (!_want || !_usingReciteQuran || _reciteEpoch != epoch) return;
+      // v1.0.13: never compete with the fast tracker while the reader is speaking. Wait for a pause (max 5 s).
+      for (int w = 0; w < 33; w++) {
+        final int sinceVoice = DateTime.now().millisecondsSinceEpoch - _reciteLastVoiceChunkMs;
+        if (sinceVoice >= 350) break;
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        if (!_want || !_usingReciteQuran || _reciteEpoch != epoch) return;
+      }
       final modelPath = await _prepareBundledWhisperModel();
       if (modelPath == null) {
         _js('recite_verify', {'segId': segId, 'text': '', 'noModel': true});
