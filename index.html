@@ -7283,6 +7283,27 @@ function triggerMistakeOnCurrentWord(spokenToken, errorType) {
   const currentExpected = currentObj?.t || '';
   const errKind = errorType || (spokenToken ? 'substitution' : 'omission');
 
+  // v1.0.16: the previous token for THIS word was a clipped/garbled offline-model slip. If the reader has since moved on to the
+  // next word (or the check is only an omission), the word was read: accept it silently instead of raising a false alarm.
+  if (typeof window !== 'undefined' && window.__slipIdx === currentWordIndex && (Date.now() - (window.__slipTs || 0)) < 12000 && window.__isOfflineWhisperMode) {
+    let _nIdx = currentWordIndex + 1;
+    while (_nIdx < currentWordList.length && isQuranPauseMark(currentWordList[_nIdx]?.t)) _nIdx++;
+    const _nTxt = currentWordList[_nIdx]?.t || '';
+    const _movedOn = !!(spokenToken && _nTxt && isWordMatch(spokenToken, _nTxt));
+    if (errKind === 'omission' || _movedOn || (spokenToken && asrSlipLikely(spokenToken, currentExpected, '', _nTxt))) {
+      window.__slipIdx = -1;
+      acceptCurrentWordAsHeard();
+      if (_movedOn && currentWordIndex < currentWordList.length) {
+        wordStates[currentWordIndex] = 'ok';
+        currentWordIndex++;
+        advancePastPauseMarks();
+      }
+      if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return 'slip'; }
+      refreshActiveViewsAfterStep();
+      return 'slip';
+    }
+  }
+
   // 1. Mark word ('wrong' or 'swap') and keep a red mark on it
   wordStates[currentWordIndex] = errKind === 'swap' ? 'swap' : 'wrong';
   addRedMark(currentPage, currentWordIndex);
@@ -8861,6 +8882,54 @@ function isSuffixOfWord(frag, fullWord) {
   return a.length >= 2 && a.length < b.length && b.endsWith(a);
 }
 
+// v1.0.16 — Whisper-tiny slip guard (offline text path only).
+// The small offline model often returns a CLIPPED / MERGED / GARBLED token for a word that was read correctly
+// ("كرمت" for "كبرت كلمة", "بسمين" for "بسم", "الا" for "لله"). Judging such a token as a reader mistake is a false alarm.
+// A token is a "slip" (never an error by itself) when it is: (A) a very short clipped fragment, (B) the expected word plus/minus
+// a few letters, or (C) a blend of the expected word with its neighbour. A real, different Quranic word (e.g. "يجعل" for "يكن")
+// is none of these, so genuine substitutions are still reported.
+function asrSlipLikely(token, expected, prevExpected, nextExpected) {
+  const a = normArabic(token || '').replace(/\s+/g, '');
+  const b = normArabic(expected || '').replace(/\s+/g, '');
+  if (!a || !b) return false;
+  if (a === b) return false;
+  // (A) clipped fragment: 1-3 letters against a 3+ letter word
+  if (a.length <= 3 && b.length >= 3) return true;
+  // (B) expected word inside the heard token (or the reverse), only a few letters differ
+  const core = b.replace(/^ال/, '');
+  if (b.length >= 3 && a.length >= 3 && Math.abs(a.length - b.length) <= 3) {
+    if (a.includes(b) || b.includes(a)) return true;
+    if (core.length >= 3 && (a.includes(core) || core.includes(a.replace(/^ال/, '')))) return true;
+  }
+  // (C) blend: the heard letters are (almost) a subsequence of previous+expected or expected+next, start with a letter of the
+  //     previous/expected word and end with a letter of one of the three words. A token that IS the neighbouring word is not a blend.
+  if (a.length >= 4) {
+    const pool = (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList)) ? currentWordList : [];
+    const isOtherPageWord = pool.some(w => { const n = normArabic(w && w.t || '').replace(/\s+/g, ''); return n && n === a; });
+    const isNeighbour = (prevExpected && isWordMatch(token, prevExpected)) || (nextExpected && isWordMatch(token, nextExpected));
+    if (!isOtherPageWord && !isNeighbour) {
+      const pa = normArabic(prevExpected || '').replace(/\s+/g, '');
+      const nb = normArabic(nextExpected || '').replace(/\s+/g, '');
+      const missing = (hay) => {
+        let j = 0, miss = 0;
+        for (let i = 0; i < a.length; i++) {
+          const k = hay.indexOf(a[i], j);
+          if (k >= 0) j = k + 1; else miss++;
+        }
+        return miss;
+      };
+      const first = a[0], last = a[a.length - 1];
+      const firstOk = first === b[0] || (pa && first === pa[0]);
+      const lastOk = last === b[b.length - 1] || (pa && last === pa[pa.length - 1]) || (nb && last === nb[nb.length - 1]);
+      if (firstOk && lastOk) {
+        if (pa && missing(pa + b) <= 1) return true;
+        if (nb && missing(b + nb) <= 1) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function processRecitedText(text, isFinal) {
   const isDelta = !!(typeof window !== 'undefined' && window.__offlineDeltaEvent);
   if (typeof window !== 'undefined') window.__offlineDeltaEvent = false;
@@ -9326,6 +9395,12 @@ function processRecitedText(text, isFinal) {
     // ---- 6. A REAL MISTAKE on currentWordIndex (confirmed, never premature on unstable interim):
     //         - Final result, confirmed 2-word omission, or interim token with >= 2 tokens already spoken after it -> trigger mistake.
     //         - Otherwise (unstable interim / mid-word Madd / short pause) -> defer via adaptive confirmation timer. ----
+    // v1.0.16: a clipped / merged / garbled token from the small offline model is the model's slip, not the reader's mistake.
+    if (isOfflineGuard && asrSlipLikely(token, currentExpected, currentWordIndex > 0 ? currentWordList[currentWordIndex - 1]?.t : '', nextExpected)) {
+      window.__slipIdx = currentWordIndex; window.__slipTs = Date.now();
+      lastProcessedTokenCount = gi + 1;
+      continue;
+    }
     const partial = isPartialOfExpected(token, currentExpected);
     if (isDelta && partial && isLastToken) {
       // Carry word split at end of offline WAV chunk to stitch cleanly with the next chunk (zero false error!)
@@ -9336,7 +9411,7 @@ function processRecitedText(text, isFinal) {
     const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= (isOfflineGuard ? 3 : 2));
     if (stable) {
       lastProcessedTokenCount = gi + 1;
-      triggerMistakeOnCurrentWord(token);
+      if (triggerMistakeOnCurrentWord(token) === 'slip') { if (currentWordIndex >= currentWordList.length) break; continue; }
       if (stopOnErrorMandatory) break;
     } else {
       scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, partial);
