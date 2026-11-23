@@ -94,6 +94,8 @@ class _HomeState extends State<Home> {
   int _vSegSeq = 0;
   int _vQueued = 0;
   Future<void> _vChain = Future<void>.value();
+  // v1.0.14: the Whisper second opinion is OFF unless the page asks for it (it competed with the tracker for CPU).
+  bool _verifyEnabled = false;
   bool _onDeviceGotResult = false;
   bool _onDeviceFallbackTriggered = false;
   bool _onDeviceSttUnavailable = false;
@@ -528,6 +530,18 @@ class _HomeState extends State<Home> {
         final aNum = (o['ayah'] is num) ? (o['ayah'] as num).toInt() : _reciteStartAyah;
         final wNum = (o['wordInAyah'] is num) ? (o['wordInAyah'] as num).toInt() : 0;
         _haltReciteOnMistakeWord(sNum, aNum, wNum);
+      } else if (act == 'verify_cfg') {
+        _verifyEnabled = o['on'] == true;
+        if (!_verifyEnabled) _verifyReset();
+      } else if (act == 'reanchor') {
+        // v1.0.14: put the tracker back on the expected word WITHOUT dropping the audio the reader is saying now.
+        if (_usingReciteQuran && _reciteTracker != null) {
+          final sNum = (o['surah'] is num) ? (o['surah'] as num).toInt() : _reciteActiveSurah;
+          final aNum = (o['ayah'] is num) ? (o['ayah'] as num).toInt() : 1;
+          final wNum = (o['wordInAyah'] is num) ? (o['wordInAyah'] as num).toInt() : 0;
+          if (sNum >= 1 && sNum <= 114) _reciteActiveSurah = sNum;
+          _tryJumpReciteToStartPosition(_reciteActiveSurah, aNum > 0 ? aNum : 1, wNum >= 0 ? wNum : 0, force: true);
+        }
       } else if (act == 'get_page') {
         final p = (o['p'] is num) ? (o['p'] as num).toInt() : 0;
         final reqId = o['reqId']?.toString() ?? '';
@@ -1092,6 +1106,10 @@ class _HomeState extends State<Home> {
 
   void _verifyFeed(Float32List chunk, double rms) {
     if (chunk.isEmpty) return;
+    if (!_verifyEnabled) {
+      if (_vChunks.isNotEmpty) _verifyReset();
+      return;
+    }
     final bool voiced = rms > 0.015;
     _vChunks.add(Float32List.fromList(chunk));
     _vSamples += chunk.length;
