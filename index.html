@@ -12183,6 +12183,12 @@ window.__onReciteQuranWord = function(ev) {
         const _isValidIbtidaRepeat = (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && (currentWordIndex - targetIdx) <= 3 &&
             ((ev.recentSilenceMs || 0) >= 300 || (Date.now() - (window.__lastBreathOrWaqfTs || 0)) <= 4500));
         // v1.0.14: a word-0 event deep inside the ayah is NOT trusted as a restart any more; it goes through the backward guard below.
+        // v1.0.15: how far behind is the event? "Near" = same ayah / previous ayah / at most 12 words back.
+        // A deliberate repeat (re-reading the ayah) comes right AFTER A PAUSE; an engine mis-hear happens in the middle of continuous reading.
+        const _backDist = (typeof currentWordIndex === 'number') ? (currentWordIndex - targetIdx) : 0;
+        const _curAyahForDist = _curAyahNum;
+        const _isNearBack = _backDist > 0 && (_backDist <= 12 || (a > 0 && _curAyahForDist > 0 && (a === _curAyahForDist || a === _curAyahForDist - 1)));
+        const _nearRestartAfterPause = _wasAlreadyLocked && !_hasHalt && _isNearBack && (ev.recentSilenceMs || 0) >= 400;
         if (_isValidIbtidaRepeat || (_isFullAyahRestart && !_wasAlreadyLocked)) {
           if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
           if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
@@ -12193,7 +12199,7 @@ window.__onReciteQuranWord = function(ev) {
         // matches the previous ayah). Such an event is never applied at once: the reader is only taken back when the
         // very next event continues from it word by word (a real repeat). Otherwise it is dropped and the tracker is
         // put back on the expected word.
-        if (_wasAlreadyLocked && !_hasHalt && typeof currentWordIndex === 'number' && targetIdx < currentWordIndex) {
+        if (_wasAlreadyLocked && !_hasHalt && !_nearRestartAfterPause && typeof currentWordIndex === 'number' && targetIdx < currentWordIndex) {
           if (targetIdx === currentWordIndex - 1 && typeof wordStates !== 'undefined' && wordStates[targetIdx] === 'ok') {
             return; // harmless duplicate of the word just accepted
           }
@@ -12201,16 +12207,17 @@ window.__onReciteQuranWord = function(ev) {
           const _bc = window.__backCand;
           if (_bc && _bc.list === currentWordList && targetIdx === _bc.last + 1 && (_nowB - _bc.ts) <= 2500) {
             _bc.last = targetIdx; _bc.n++; _bc.ts = _nowB;
-            if (_bc.n >= 2) {
+            // v1.0.15: a FAR look-alike phrase (e.g. "ولم يجعل له" vs "لم يكن له") can fool two events in a row; far jumps need 4.
+            if (_bc.n >= (_bc.far ? 4 : 2)) {
               clearTimeout(_bc.timer); window.__backCand = null;
               for (let q = _bc.first; q < targetIdx; q++) { if (wordStates[q] !== 'wrong') wordStates[q] = 'ok'; }
               // a real re-read: fall through and accept normally
             } else { return; }
           } else {
             if (_bc) clearTimeout(_bc.timer);
-            const _cand = { list: currentWordList, first: targetIdx, last: targetIdx, n: 1, ts: _nowB, timer: null };
+            const _cand = { list: currentWordList, first: targetIdx, last: targetIdx, n: 1, ts: _nowB, timer: null, far: !_isNearBack };
             window.__backCand = _cand;
-            _cand.timer = setTimeout(function () { window.__expireBackCand(_cand); }, 1500);
+            _cand.timer = setTimeout(function () { window.__expireBackCand(_cand); }, _cand.far ? 2500 : 1500);
             return;
           }
         }
