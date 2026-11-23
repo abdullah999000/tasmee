@@ -7283,6 +7283,34 @@ function triggerMistakeOnCurrentWord(spokenToken, errorType) {
   const currentExpected = currentObj?.t || '';
   const errKind = errorType || (spokenToken ? 'substitution' : 'omission');
 
+  // v1.0.17 AUTO-PASS: a word with a tajweed rule (idgham/ghunnah/shadda/madd/ikhfa/iqlab...) that was flagged a 2nd time within 60 s
+  // is almost certainly the recogniser failing on the tajweed (e.g. ﴿وَمِمَّا﴾), not the reader. Accept it and move on.
+  // The event is kept in tasmee_auto_pass (localStorage) so the real cases can be reviewed later.
+  try {
+    const _ci = currentWordIndex;
+    const _meta = window.__analyzeWordTajweedAndWaqf(currentObj, currentWordList[_ci + 1] || null, currentWordList[_ci - 1] || null);
+    const _hard = /[\u0651]/.test(currentExpected) || (_meta.rules || []).some(r => r === 'madd' || r === 'ghunnah' || r === 'idgham' || r === 'ikhfa' || r === 'iqlab' || r === 'meem_sakinah' || r === 'muqattaah_madd');
+    if (_hard) {
+      window.__failCount = window.__failCount || {};
+      const _k = currentPage + ':' + _ci;
+      const _f = window.__failCount[_k];
+      const _now = Date.now();
+      if (_f && (_now - _f.ts) <= 60000) { _f.n++; _f.ts = _now; } else { window.__failCount[_k] = { n: 1, ts: _now }; }
+      if (window.__failCount[_k].n >= 2) {
+        delete window.__failCount[_k];
+        try {
+          const lg = JSON.parse(localStorage.getItem('tasmee_auto_pass') || '[]');
+          lg.push({ page: currentPage, idx: _ci, expected: currentExpected, heard: spokenToken || '', ts: _now });
+          if (lg.length > 200) lg.splice(0, lg.length - 200);
+          localStorage.setItem('tasmee_auto_pass', JSON.stringify(lg));
+        } catch (_) {}
+        markFalseAlarmAndAdvance(_ci);
+        try { window.__postReanchor(currentWordIndex); } catch (_) {}
+        return 'autopass';
+      }
+    }
+  } catch (_) {}
+
   // v1.0.16: the previous token for THIS word was a clipped/garbled offline-model slip. If the reader has since moved on to the
   // next word (or the check is only an omission), the word was read: accept it silently instead of raising a false alarm.
   if (typeof window !== 'undefined' && window.__slipIdx === currentWordIndex && (Date.now() - (window.__slipTs || 0)) < 12000 && window.__isOfflineWhisperMode) {
@@ -9411,7 +9439,7 @@ function processRecitedText(text, isFinal) {
     const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= (isOfflineGuard ? 3 : 2));
     if (stable) {
       lastProcessedTokenCount = gi + 1;
-      if (triggerMistakeOnCurrentWord(token) === 'slip') { if (currentWordIndex >= currentWordList.length) break; continue; }
+      { const _trr = triggerMistakeOnCurrentWord(token); if (_trr === 'slip' || _trr === 'autopass') { if (currentWordIndex >= currentWordList.length) break; continue; } }
       if (stopOnErrorMandatory) break;
     } else {
       scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, partial);
@@ -12175,6 +12203,23 @@ window.__onReciteQuranWord = function(ev) {
       }
 
       if (isGreen) {
+        // v1.0.17 LOOK-ALIKE PHRASES (e.g. Al-Baqarah 2:3 "الذين يؤمنون بالغيب" vs 2:4 "والذين يؤمنون بما أنزل"):
+        // when the tracker reports a word whose TEXT is the same as the expected word (ignoring a leading و/ف), the audio is
+        // indistinguishable, so the reader is assumed to be on the expected word. Without this the two consecutive look-alike
+        // events were accepted as a real "repeat" and the reader was thrown back to the previous ayah (red on بالغيب / الصلاة ...).
+        if (_wasAlreadyLocked && !_hasHalt && typeof currentWordIndex === 'number') {
+          let _e = currentWordIndex;
+          while (_e < currentWordList.length && window.__isPauseToken(currentWordList[_e])) _e++;
+          if (_e < currentWordList.length && targetIdx !== _e && Math.abs(targetIdx - _e) <= 40 &&
+              !(targetIdx === _e - 1 && wordStates[targetIdx] === 'ok') &&
+              wordStates[_e] === 'pending' && currentWordList[targetIdx] && currentWordList[_e] &&
+              window.__lookKey(currentWordList[targetIdx].t) !== '' &&
+              window.__lookKey(currentWordList[targetIdx].t) === window.__lookKey(currentWordList[_e].t)) {
+            targetIdx = _e;
+            window.__lookRemapped = true;
+            setTimeout(function () { try { window.__postReanchor(currentWordIndex); } catch (_) {} }, 0);
+          }
+        }
         // v1.0.14: a backward match held earlier (engine mis-hear) is settled by the first forward event.
         if (window.__backCand && typeof window.__resolveBackCandForward === 'function') window.__resolveBackCandForward(targetIdx);
         // 1. Resolve any pending uncertain_wait red timer using context of the confirmed green word!
@@ -12297,12 +12342,24 @@ window.__onReciteQuranWord = function(ev) {
           }
         }
         // If Ayah 1 is a single-word Muqatta'ah (e.g. ﴿الم﴾ in Aal-Imran) and Ayah 2 word 0 confirms green in Wasl after voice, mark Muqatta'ah ok!
-        if (targetIdx > 0 && typeof wordStates !== 'undefined' && wordStates[targetIdx - 1] === 'pending') {
+        // v1.0.17: also heals a muqatta'ah that was wrongly flagged red; the reader clearly passed it (next word is green).
+        if (targetIdx > 0 && typeof wordStates !== 'undefined' && (wordStates[targetIdx - 1] === 'pending' || wordStates[targetIdx - 1] === 'wrong')) {
           const _prevMuqMeta = window.__analyzeWordTajweedAndWaqf(currentWordList[targetIdx - 1], currentWordList[targetIdx], null);
-          if (_prevMuqMeta.rules.includes('muqattaah_madd') && (ev.voiceActiveMs || 0) >= 400) {
-            wordStates[targetIdx - 1] = 'ok';
+          if (_prevMuqMeta.rules.includes('muqattaah_madd')) {
+            if (wordStates[targetIdx - 1] === 'wrong') {
+              try {
+                wordErrors = wordErrors.filter(e => e.index !== targetIdx - 1);
+                if (redMarks) delete redMarks[currentPage + ':' + (targetIdx - 1)];
+                sessionErrorKeys.delete(currentPage + ':' + (targetIdx - 1));
+                if (typeof updateMistakesCounterUI === 'function') updateMistakesCounterUI();
+              } catch (_) {}
+              wordStates[targetIdx - 1] = 'ok';
+            } else if ((ev.voiceActiveMs || 0) >= 400 || window.__lookRemapped !== true) {
+              wordStates[targetIdx - 1] = 'ok';
+            }
           }
         }
+        window.__lookRemapped = false;
         if ((ev.recentSilenceMs || 0) >= 350) window.__lastBreathOrWaqfTs = Date.now();
         if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
         if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
@@ -12343,6 +12400,12 @@ window.__onReciteQuranWord = function(ev) {
         const _nextObj = targetIdx + 1 < currentWordList.length ? currentWordList[targetIdx + 1] : null;
         const _prevObj = targetIdx > 0 ? currentWordList[targetIdx - 1] : null;
         const _tajweedMeta = window.__analyzeWordTajweedAndWaqf(_wordObj, _nextObj, _prevObj);
+        // v1.0.17: ﴿الم﴾ and the other disconnected letters are spelled out (ألف لام ميم); the engine cannot align them reliably,
+        // so a red here is never an error. The word is accepted when the next word turns green (or by the stall rule below).
+        if (_tajweedMeta.rules.includes('muqattaah_madd') && !ev.forceImmediate) {
+          if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
+          return;
+        }
 
         const _commitReciteMistake = () => {
           window.__pendingReciteRedTimer = null;
@@ -12352,7 +12415,8 @@ window.__onReciteQuranWord = function(ev) {
           if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
           if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
           if (typeof triggerMistakeOnCurrentWord === 'function') {
-            triggerMistakeOnCurrentWord(ev.spoken || '', ev.errorType || 'substitution');
+            const _trRes = triggerMistakeOnCurrentWord(ev.spoken || '', ev.errorType || 'substitution');
+            if (_trRes === 'autopass') return; // v1.0.17: hard-tajweed word failed twice -> accepted, do not pull the engine back
           } else {
             if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
             if (typeof recordUserMistake === 'function') recordUserMistake(_wordObj, targetIdx, ev.spoken || '');
@@ -12670,6 +12734,13 @@ window.__postJumpToWord = function(idx) {
 
 // v1.0.14 helpers for the backward guard ------------------------------------------------------------
 window.__backCand = null;
+// v1.0.17: text key of a word for look-alike detection (no diacritics, no leading و/ف conjunction).
+window.__lookKey = function(t) {
+  let k = (typeof normArabic === 'function') ? normArabic(t || '') : String(t || '');
+  k = k.replace(/\s+/g, '');
+  if (k.length > 3) k = k.replace(/^[وف]/, '');
+  return k;
+};
 window.__postReanchor = function(idx) {
   try {
     const o = currentWordList[idx];
@@ -12762,6 +12833,16 @@ window.__onReciteStall = function(d) {
     const prevObj = idx > 0 ? currentWordList[idx - 1] : null;
     const meta = window.__analyzeWordTajweedAndWaqf(obj, nextObj, prevObj) || { rules: [] };
     const rules = meta.rules || [];
+    // v1.0.17: spelled-out letters (ﺍلم) are accepted after ~1.6 s of speech instead of being flagged red.
+    if (rules.includes('muqattaah_madd') && voiced >= 1600) {
+      wordStates[idx] = 'ok';
+      window.__lastGreenTs = Date.now();
+      currentWordIndex = idx + 1;
+      if (typeof advancePastPauseMarks === 'function') advancePastPauseMarks();
+      if (currentWordIndex < currentWordList.length) window.__postJumpToWord(currentWordIndex);
+      if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+      return false;
+    }
     const lenient = !!meta.atValidWaqf || rules.some(r => r === 'madd' || r === 'muqattaah_madd' || r === 'idgham' || r === 'ikhfa' || r === 'iqlab' || r === 'meem_sakinah');
     const need = lenient ? 4600 : 2300;
     const info = { voiced, need, idx, lenient, flagged: false };
