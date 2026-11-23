@@ -33,42 +33,51 @@ rm -f assets/models/ggml-base-q5_1.bin
 if [ ! -s "$MODEL_FILE" ]; then
   echo "Downloading fast Quran-tuned Whisper Tiny GGML model (~43.5 MB)..."
   python3 - <<'PYDL'
-import urllib.request, os, sys, struct
+import urllib.request, os, sys, struct, time
 
 out_path = "assets/models/ggml-tiny-ar-quran.bin"
 candidate_urls = [
     "https://huggingface.co/ram-a-dhan/tarteel-whisper-quran-ggml/resolve/main/tarteel-ai-whisper-tiny-ar-quran-ggml-q8_0.bin",
+    "https://hf-mirror.com/ram-a-dhan/tarteel-whisper-quran-ggml/resolve/main/tarteel-ai-whisper-tiny-ar-quran-ggml-q8_0.bin",
     "https://huggingface.co/Oa-4/whisper-tiny-ar-quran-gguf/resolve/main/ggml-tiny-ar-quran-q8_0.bin",
+    "https://hf-mirror.com/Oa-4/whisper-tiny-ar-quran-gguf/resolve/main/ggml-tiny-ar-quran-q8_0.bin",
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
+    "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
 ]
 
 for url in candidate_urls:
     tmp = out_path + ".dl"
-    try:
-        print(f"Downloading fast Quran model from: {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": "tasmee-builder"})
-        with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
-            while True:
-                chunk = resp.read(1024 * 256)
-                if not chunk:
-                    break
-                f.write(chunk)
-        sz = os.path.getsize(tmp)
-        with open(tmp, "rb") as f:
-            hdr = f.read(28)
-        magic = hdr[:4]
-        n_text_ctx = struct.unpack("<I", hdr[24:28])[0] if len(hdr) == 28 else 0
-        if sz > 15 * 1024 * 1024 and magic in (b"lmgg", b"ggml") and n_text_ctx == 448:
-            os.replace(tmp, out_path)
-            print(f"Verified fast Quran GGML Tiny model ({sz:,} bytes, n_text_ctx={n_text_ctx}) from {url}")
-            sys.exit(0)
-        else:
-            print(f"Skipping incompatible model (size={sz}, magic={magic!r}, n_text_ctx={n_text_ctx})")
-            os.remove(tmp)
-    except Exception as e:
-        print(f"Download failed for {url}: {e}")
-        if os.path.exists(tmp):
-            os.remove(tmp)
+    for attempt in range(1, 5):
+        try:
+            print(f"Downloading fast Quran model (attempt {attempt}/4) from: {url}")
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 tasmee-builder"})
+            with urllib.request.urlopen(req, timeout=180) as resp, open(tmp, "wb") as f:
+                while True:
+                    chunk = resp.read(1024 * 256)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            sz = os.path.getsize(tmp)
+            with open(tmp, "rb") as f:
+                hdr = f.read(28)
+            magic = hdr[:4]
+            n_text_ctx = struct.unpack("<I", hdr[24:28])[0] if len(hdr) == 28 else 0
+            if sz > 15 * 1024 * 1024 and magic in (b"lmgg", b"ggml") and n_text_ctx == 448:
+                os.replace(tmp, out_path)
+                print(f"Verified fast Quran GGML Tiny model ({sz:,} bytes, n_text_ctx={n_text_ctx}) from {url}")
+                sys.exit(0)
+            else:
+                print(f"Skipping incompatible model (size={sz}, magic={magic!r}, n_text_ctx={n_text_ctx})")
+                os.remove(tmp)
+                break
+        except Exception as e:
+            print(f"Download failed (attempt {attempt}/4) for {url}: {e}")
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            if attempt < 4:
+                wait_s = attempt * 6
+                print(f"Retrying in {wait_s}s...")
+                time.sleep(wait_s)
 sys.exit(1)
 PYDL
 fi
@@ -101,7 +110,14 @@ cd _build
 flutter pub get
 mkdir -p assets/model
 echo "Downloading recite_quran streaming Zipformer-v3 neural model (~69 MB)..."
-dart run recite_quran:download_model
+for attempt in 1 2 3 4 5; do
+  echo "recite_quran:download_model attempt $attempt/5..."
+  if dart run recite_quran:download_model; then
+    break
+  fi
+  echo "download_model failed on attempt $attempt/5, retrying in 10s..."
+  sleep 10
+done
 RECITE_ONNX="$(find assets/model -type f -name '*.onnx' 2>/dev/null | head -n 1 || true)"
 if [ -z "$RECITE_ONNX" ] || [ "$(stat -c%s "$RECITE_ONNX" 2>/dev/null || wc -c < "$RECITE_ONNX")" -lt 52428800 ]; then
   echo "ERROR: recite_quran Zipformer-v3 ONNX model missing or smaller than 50 MB in assets/model/!" >&2
