@@ -4125,7 +4125,7 @@ html[data-theme="light"] #tasmee-exit-toast {
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>🔎 التحقق النصي من الأخطاء دون إنترنت (رأي ثانٍ عبر Whisper)</span>
-          <input type="checkbox" id="cfg-verify-errors" onchange="window.__reciteVerifyEnabled=this.checked;try{localStorage.setItem('tasmee_verify_v1014',this.checked?'1':'0')}catch(_){};if(window.__postVerifyCfg)window.__postVerifyCfg()" style="width:18px;height:18px;accent-color:var(--accent-green);">
+          <input type="checkbox" id="cfg-verify-errors" checked onchange="window.__reciteVerifyEnabled=this.checked;try{localStorage.setItem('tasmee_verify_errors',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>🔴 تعليم الكلمة بالأحمر عند التعثر (توقف التقدم أثناء استمرار القراءة)</span>
@@ -4900,7 +4900,6 @@ if (window.Tasmee) {
       const isOfflineNow = (typeof navigator !== 'undefined' && navigator.onLine === false);
       const pv = document.getElementById('live-heard-preview');
       if (pv) pv.textContent = '⏳ [1] جارٍ تشغيل الميكروفون...';
-      try { if (typeof window.__postVerifyCfg === 'function') window.__postVerifyCfg(); } catch (_) {}
       Tasmee.postMessage(JSON.stringify(Object.assign({ a: 'start' }, (typeof window.__getTasmeeActivePos === 'function' ? window.__getTasmeeActivePos() : { surah: 1, ayah: 1, wordInAyah: 0 }), { lang: this.lang, offline: isOfflineNow, partialResults: true, prompt: promptHint })));
     }
     resetSession() {
@@ -7283,55 +7282,6 @@ function triggerMistakeOnCurrentWord(spokenToken, errorType) {
   const currentExpected = currentObj?.t || '';
   const errKind = errorType || (spokenToken ? 'substitution' : 'omission');
 
-  // v1.0.17 AUTO-PASS: a word with a tajweed rule (idgham/ghunnah/shadda/madd/ikhfa/iqlab...) that was flagged a 2nd time within 60 s
-  // is almost certainly the recogniser failing on the tajweed (e.g. ﴿وَمِمَّا﴾), not the reader. Accept it and move on.
-  // The event is kept in tasmee_auto_pass (localStorage) so the real cases can be reviewed later.
-  try {
-    const _ci = currentWordIndex;
-    const _meta = window.__analyzeWordTajweedAndWaqf(currentObj, currentWordList[_ci + 1] || null, currentWordList[_ci - 1] || null);
-    const _hard = /[\u0651]/.test(currentExpected) || (_meta.rules || []).some(r => r === 'madd' || r === 'ghunnah' || r === 'idgham' || r === 'ikhfa' || r === 'iqlab' || r === 'meem_sakinah' || r === 'muqattaah_madd');
-    if (_hard) {
-      window.__failCount = window.__failCount || {};
-      const _k = currentPage + ':' + _ci;
-      const _f = window.__failCount[_k];
-      const _now = Date.now();
-      if (_f && (_now - _f.ts) <= 60000) { _f.n++; _f.ts = _now; } else { window.__failCount[_k] = { n: 1, ts: _now }; }
-      if (window.__failCount[_k].n >= 2) {
-        delete window.__failCount[_k];
-        try {
-          const lg = JSON.parse(localStorage.getItem('tasmee_auto_pass') || '[]');
-          lg.push({ page: currentPage, idx: _ci, expected: currentExpected, heard: spokenToken || '', ts: _now });
-          if (lg.length > 200) lg.splice(0, lg.length - 200);
-          localStorage.setItem('tasmee_auto_pass', JSON.stringify(lg));
-        } catch (_) {}
-        markFalseAlarmAndAdvance(_ci);
-        try { window.__postReanchor(currentWordIndex); } catch (_) {}
-        return 'autopass';
-      }
-    }
-  } catch (_) {}
-
-  // v1.0.16: the previous token for THIS word was a clipped/garbled offline-model slip. If the reader has since moved on to the
-  // next word (or the check is only an omission), the word was read: accept it silently instead of raising a false alarm.
-  if (typeof window !== 'undefined' && window.__slipIdx === currentWordIndex && (Date.now() - (window.__slipTs || 0)) < 12000 && window.__isOfflineWhisperMode) {
-    let _nIdx = currentWordIndex + 1;
-    while (_nIdx < currentWordList.length && isQuranPauseMark(currentWordList[_nIdx]?.t)) _nIdx++;
-    const _nTxt = currentWordList[_nIdx]?.t || '';
-    const _movedOn = !!(spokenToken && _nTxt && isWordMatch(spokenToken, _nTxt));
-    if (errKind === 'omission' || _movedOn || (spokenToken && asrSlipLikely(spokenToken, currentExpected, '', _nTxt))) {
-      window.__slipIdx = -1;
-      acceptCurrentWordAsHeard();
-      if (_movedOn && currentWordIndex < currentWordList.length) {
-        wordStates[currentWordIndex] = 'ok';
-        currentWordIndex++;
-        advancePastPauseMarks();
-      }
-      if (currentWordIndex >= currentWordList.length) { finishPageOrAdvance(); return 'slip'; }
-      refreshActiveViewsAfterStep();
-      return 'slip';
-    }
-  }
-
   // 1. Mark word ('wrong' or 'swap') and keep a red mark on it
   wordStates[currentWordIndex] = errKind === 'swap' ? 'swap' : 'wrong';
   addRedMark(currentPage, currentWordIndex);
@@ -8910,54 +8860,6 @@ function isSuffixOfWord(frag, fullWord) {
   return a.length >= 2 && a.length < b.length && b.endsWith(a);
 }
 
-// v1.0.16 — Whisper-tiny slip guard (offline text path only).
-// The small offline model often returns a CLIPPED / MERGED / GARBLED token for a word that was read correctly
-// ("كرمت" for "كبرت كلمة", "بسمين" for "بسم", "الا" for "لله"). Judging such a token as a reader mistake is a false alarm.
-// A token is a "slip" (never an error by itself) when it is: (A) a very short clipped fragment, (B) the expected word plus/minus
-// a few letters, or (C) a blend of the expected word with its neighbour. A real, different Quranic word (e.g. "يجعل" for "يكن")
-// is none of these, so genuine substitutions are still reported.
-function asrSlipLikely(token, expected, prevExpected, nextExpected) {
-  const a = normArabic(token || '').replace(/\s+/g, '');
-  const b = normArabic(expected || '').replace(/\s+/g, '');
-  if (!a || !b) return false;
-  if (a === b) return false;
-  // (A) clipped fragment: 1-3 letters against a 3+ letter word
-  if (a.length <= 3 && b.length >= 3) return true;
-  // (B) expected word inside the heard token (or the reverse), only a few letters differ
-  const core = b.replace(/^ال/, '');
-  if (b.length >= 3 && a.length >= 3 && Math.abs(a.length - b.length) <= 3) {
-    if (a.includes(b) || b.includes(a)) return true;
-    if (core.length >= 3 && (a.includes(core) || core.includes(a.replace(/^ال/, '')))) return true;
-  }
-  // (C) blend: the heard letters are (almost) a subsequence of previous+expected or expected+next, start with a letter of the
-  //     previous/expected word and end with a letter of one of the three words. A token that IS the neighbouring word is not a blend.
-  if (a.length >= 4) {
-    const pool = (typeof currentWordList !== 'undefined' && Array.isArray(currentWordList)) ? currentWordList : [];
-    const isOtherPageWord = pool.some(w => { const n = normArabic(w && w.t || '').replace(/\s+/g, ''); return n && n === a; });
-    const isNeighbour = (prevExpected && isWordMatch(token, prevExpected)) || (nextExpected && isWordMatch(token, nextExpected));
-    if (!isOtherPageWord && !isNeighbour) {
-      const pa = normArabic(prevExpected || '').replace(/\s+/g, '');
-      const nb = normArabic(nextExpected || '').replace(/\s+/g, '');
-      const missing = (hay) => {
-        let j = 0, miss = 0;
-        for (let i = 0; i < a.length; i++) {
-          const k = hay.indexOf(a[i], j);
-          if (k >= 0) j = k + 1; else miss++;
-        }
-        return miss;
-      };
-      const first = a[0], last = a[a.length - 1];
-      const firstOk = first === b[0] || (pa && first === pa[0]);
-      const lastOk = last === b[b.length - 1] || (pa && last === pa[pa.length - 1]) || (nb && last === nb[nb.length - 1]);
-      if (firstOk && lastOk) {
-        if (pa && missing(pa + b) <= 1) return true;
-        if (nb && missing(b + nb) <= 1) return true;
-      }
-    }
-  }
-  return false;
-}
-
 function processRecitedText(text, isFinal) {
   const isDelta = !!(typeof window !== 'undefined' && window.__offlineDeltaEvent);
   if (typeof window !== 'undefined') window.__offlineDeltaEvent = false;
@@ -9423,12 +9325,6 @@ function processRecitedText(text, isFinal) {
     // ---- 6. A REAL MISTAKE on currentWordIndex (confirmed, never premature on unstable interim):
     //         - Final result, confirmed 2-word omission, or interim token with >= 2 tokens already spoken after it -> trigger mistake.
     //         - Otherwise (unstable interim / mid-word Madd / short pause) -> defer via adaptive confirmation timer. ----
-    // v1.0.16: a clipped / merged / garbled token from the small offline model is the model's slip, not the reader's mistake.
-    if (isOfflineGuard && asrSlipLikely(token, currentExpected, currentWordIndex > 0 ? currentWordList[currentWordIndex - 1]?.t : '', nextExpected)) {
-      window.__slipIdx = currentWordIndex; window.__slipTs = Date.now();
-      lastProcessedTokenCount = gi + 1;
-      continue;
-    }
     const partial = isPartialOfExpected(token, currentExpected);
     if (isDelta && partial && isLastToken) {
       // Carry word split at end of offline WAV chunk to stitch cleanly with the next chunk (zero false error!)
@@ -9439,7 +9335,7 @@ function processRecitedText(text, isFinal) {
     const stable = isFinal || omissionConfirmed || (!partial && tokensAfter >= (isOfflineGuard ? 3 : 2));
     if (stable) {
       lastProcessedTokenCount = gi + 1;
-      { const _trr = triggerMistakeOnCurrentWord(token); if (_trr === 'slip' || _trr === 'autopass') { if (currentWordIndex >= currentWordList.length) break; continue; } }
+      triggerMistakeOnCurrentWord(token);
       if (stopOnErrorMandatory) break;
     } else {
       scheduleMismatchCheck(gi, token, prevToken, prevPrevToken, partial);
@@ -12203,25 +12099,6 @@ window.__onReciteQuranWord = function(ev) {
       }
 
       if (isGreen) {
-        // v1.0.17 LOOK-ALIKE PHRASES (e.g. Al-Baqarah 2:3 "الذين يؤمنون بالغيب" vs 2:4 "والذين يؤمنون بما أنزل"):
-        // when the tracker reports a word whose TEXT is the same as the expected word (ignoring a leading و/ف), the audio is
-        // indistinguishable, so the reader is assumed to be on the expected word. Without this the two consecutive look-alike
-        // events were accepted as a real "repeat" and the reader was thrown back to the previous ayah (red on بالغيب / الصلاة ...).
-        if (_wasAlreadyLocked && !_hasHalt && typeof currentWordIndex === 'number') {
-          let _e = currentWordIndex;
-          while (_e < currentWordList.length && window.__isPauseToken(currentWordList[_e])) _e++;
-          if (_e < currentWordList.length && targetIdx !== _e && Math.abs(targetIdx - _e) <= 40 &&
-              !(targetIdx === _e - 1 && wordStates[targetIdx] === 'ok') &&
-              wordStates[_e] === 'pending' && currentWordList[targetIdx] && currentWordList[_e] &&
-              window.__lookKey(currentWordList[targetIdx].t) !== '' &&
-              window.__lookKey(currentWordList[targetIdx].t) === window.__lookKey(currentWordList[_e].t)) {
-            targetIdx = _e;
-            window.__lookRemapped = true;
-            setTimeout(function () { try { window.__postReanchor(currentWordIndex); } catch (_) {} }, 0);
-          }
-        }
-        // v1.0.14: a backward match held earlier (engine mis-hear) is settled by the first forward event.
-        if (window.__backCand && typeof window.__resolveBackCandForward === 'function') window.__resolveBackCandForward(targetIdx);
         // 1. Resolve any pending uncertain_wait red timer using context of the confirmed green word!
         if (window.__pendingReciteRedTimer) {
           const _pIdx = window.__pendingReciteRedIdx;
@@ -12302,64 +12179,25 @@ window.__onReciteQuranWord = function(ev) {
         const _isFullAyahRestart = (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && wInAyah === 0 && a > 0 && a === _curAyahNum);
         const _isValidIbtidaRepeat = (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex && (currentWordIndex - targetIdx) <= 3 &&
             ((ev.recentSilenceMs || 0) >= 300 || (Date.now() - (window.__lastBreathOrWaqfTs || 0)) <= 4500));
-        // v1.0.14: a word-0 event deep inside the ayah is NOT trusted as a restart any more; it goes through the backward guard below.
-        // v1.0.15: how far behind is the event? "Near" = same ayah / previous ayah / at most 12 words back.
-        // A deliberate repeat (re-reading the ayah) comes right AFTER A PAUSE; an engine mis-hear happens in the middle of continuous reading.
-        const _backDist = (typeof currentWordIndex === 'number') ? (currentWordIndex - targetIdx) : 0;
-        const _curAyahForDist = _curAyahNum;
-        const _isNearBack = _backDist > 0 && (_backDist <= 12 || (a > 0 && _curAyahForDist > 0 && (a === _curAyahForDist || a === _curAyahForDist - 1)));
-        const _nearRestartAfterPause = _wasAlreadyLocked && !_hasHalt && _isNearBack && (ev.recentSilenceMs || 0) >= 400;
-        if (_isValidIbtidaRepeat || (_isFullAyahRestart && !_wasAlreadyLocked)) {
+        if (_isFullAyahRestart || _isValidIbtidaRepeat) {
           if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
           if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
           return;
         }
-        // v1.0.14 BACKWARD GUARD: the tracker sometimes matches a word that is far BEHIND the reader (k/q confusion,
-        // similar-sounding words: e.g. at the end of an ayah it re-matches the ayah's first word, or at an ayah start it
-        // matches the previous ayah). Such an event is never applied at once: the reader is only taken back when the
-        // very next event continues from it word by word (a real repeat). Otherwise it is dropped and the tracker is
-        // put back on the expected word.
-        if (_wasAlreadyLocked && !_hasHalt && !_nearRestartAfterPause && typeof currentWordIndex === 'number' && targetIdx < currentWordIndex) {
-          if (targetIdx === currentWordIndex - 1 && typeof wordStates !== 'undefined' && wordStates[targetIdx] === 'ok') {
-            return; // harmless duplicate of the word just accepted
-          }
-          const _nowB = Date.now();
-          const _bc = window.__backCand;
-          if (_bc && _bc.list === currentWordList && targetIdx === _bc.last + 1 && (_nowB - _bc.ts) <= 2500) {
-            _bc.last = targetIdx; _bc.n++; _bc.ts = _nowB;
-            // v1.0.15: a FAR look-alike phrase (e.g. "ولم يجعل له" vs "لم يكن له") can fool two events in a row; far jumps need 4.
-            if (_bc.n >= (_bc.far ? 4 : 2)) {
-              clearTimeout(_bc.timer); window.__backCand = null;
-              for (let q = _bc.first; q < targetIdx; q++) { if (wordStates[q] !== 'wrong') wordStates[q] = 'ok'; }
-              // a real re-read: fall through and accept normally
-            } else { return; }
-          } else {
-            if (_bc) clearTimeout(_bc.timer);
-            const _cand = { list: currentWordList, first: targetIdx, last: targetIdx, n: 1, ts: _nowB, timer: null, far: !_isNearBack };
-            window.__backCand = _cand;
-            _cand.timer = setTimeout(function () { window.__expireBackCand(_cand); }, _cand.far ? 2500 : 1500);
-            return;
-          }
+        // A forced-alignment tracker can occasionally emit a stale match from an earlier
+        // position (especially on acoustically similar words). Never let that event rewind
+        // the page cursor or repaint an already-passed word. Legitimate restart/ibtida cases
+        // have already been handled explicitly above.
+        if (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex) {
+          return;
         }
         // If Ayah 1 is a single-word Muqatta'ah (e.g. ﴿الم﴾ in Aal-Imran) and Ayah 2 word 0 confirms green in Wasl after voice, mark Muqatta'ah ok!
-        // v1.0.17: also heals a muqatta'ah that was wrongly flagged red; the reader clearly passed it (next word is green).
-        if (targetIdx > 0 && typeof wordStates !== 'undefined' && (wordStates[targetIdx - 1] === 'pending' || wordStates[targetIdx - 1] === 'wrong')) {
+        if (targetIdx > 0 && typeof wordStates !== 'undefined' && wordStates[targetIdx - 1] === 'pending') {
           const _prevMuqMeta = window.__analyzeWordTajweedAndWaqf(currentWordList[targetIdx - 1], currentWordList[targetIdx], null);
-          if (_prevMuqMeta.rules.includes('muqattaah_madd')) {
-            if (wordStates[targetIdx - 1] === 'wrong') {
-              try {
-                wordErrors = wordErrors.filter(e => e.index !== targetIdx - 1);
-                if (redMarks) delete redMarks[currentPage + ':' + (targetIdx - 1)];
-                sessionErrorKeys.delete(currentPage + ':' + (targetIdx - 1));
-                if (typeof updateMistakesCounterUI === 'function') updateMistakesCounterUI();
-              } catch (_) {}
-              wordStates[targetIdx - 1] = 'ok';
-            } else if ((ev.voiceActiveMs || 0) >= 400 || window.__lookRemapped !== true) {
-              wordStates[targetIdx - 1] = 'ok';
-            }
+          if (_prevMuqMeta.rules.includes('muqattaah_madd') && (ev.voiceActiveMs || 0) >= 400) {
+            wordStates[targetIdx - 1] = 'ok';
           }
         }
-        window.__lookRemapped = false;
         if ((ev.recentSilenceMs || 0) >= 350) window.__lastBreathOrWaqfTs = Date.now();
         if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
         if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
@@ -12396,16 +12234,13 @@ window.__onReciteQuranWord = function(ev) {
           finishPageOrAdvance(true);
         }
       } else if (isRed) {
+        // Ignore stale red events from a word that is already behind the live cursor.
+        // They must not pull the user back to a previous occurrence of a similar word.
+        if (typeof currentWordIndex === 'number' && targetIdx < currentWordIndex) return;
         const _wordObj = currentWordList[targetIdx];
         const _nextObj = targetIdx + 1 < currentWordList.length ? currentWordList[targetIdx + 1] : null;
         const _prevObj = targetIdx > 0 ? currentWordList[targetIdx - 1] : null;
         const _tajweedMeta = window.__analyzeWordTajweedAndWaqf(_wordObj, _nextObj, _prevObj);
-        // v1.0.17: ﴿الم﴾ and the other disconnected letters are spelled out (ألف لام ميم); the engine cannot align them reliably,
-        // so a red here is never an error. The word is accepted when the next word turns green (or by the stall rule below).
-        if (_tajweedMeta.rules.includes('muqattaah_madd') && !ev.forceImmediate) {
-          if (typeof resetSilenceHintTimer === 'function') resetSilenceHintTimer();
-          return;
-        }
 
         const _commitReciteMistake = () => {
           window.__pendingReciteRedTimer = null;
@@ -12415,8 +12250,7 @@ window.__onReciteQuranWord = function(ev) {
           if (typeof hideSilencePeekBar === 'function') hideSilencePeekBar();
           if (typeof currentWordIndex !== 'undefined') currentWordIndex = targetIdx;
           if (typeof triggerMistakeOnCurrentWord === 'function') {
-            const _trRes = triggerMistakeOnCurrentWord(ev.spoken || '', ev.errorType || 'substitution');
-            if (_trRes === 'autopass') return; // v1.0.17: hard-tajweed word failed twice -> accepted, do not pull the engine back
+            triggerMistakeOnCurrentWord(ev.spoken || '', ev.errorType || 'substitution');
           } else {
             if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) wordStates[targetIdx] = 'wrong';
             if (typeof recordUserMistake === 'function') recordUserMistake(_wordObj, targetIdx, ev.spoken || '');
@@ -12495,7 +12329,7 @@ window.__onReciteQuranWord = function(ev) {
 // Whisper-Quran model and this block compares that TEXT with the words the tracker just accepted.
 // Conservative by design (Tarteel PDF Sec 13.3): a false alarm is worse than a missed error.
 // ==========================================================================
-window.__reciteVerifyEnabled = false; // v1.0.14: off by default (it competes with the tracker for CPU -> delayed highlight)
+window.__reciteVerifyEnabled = true;
 window.__verifyBuf = [];
 window.__verifySnaps = {};
 window.__lastVerifyInfo = null;
@@ -12713,14 +12547,6 @@ window.__reciteStallEnabled = true;
 window.__lastGreenTs = 0;
 window.__stallInfo = null;
 
-window.__postVerifyCfg = function() {
-  try {
-    if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
-      window.Tasmee.postMessage(JSON.stringify({ a: 'verify_cfg', on: !!window.__reciteVerifyEnabled }));
-    }
-  } catch (_) {}
-};
-
 window.__postJumpToWord = function(idx) {
   try {
     const o = currentWordList[idx];
@@ -12729,91 +12555,6 @@ window.__postJumpToWord = function(idx) {
     let w = list.indexOf(idx);
     if (w < 0) w = 0;
     window.Tasmee.postMessage(JSON.stringify({ a: 'halt_on_error', surah: o.s || 1, ayah: o.a || 1, wordInAyah: w }));
-  } catch (_) {}
-};
-
-// v1.0.14 helpers for the backward guard ------------------------------------------------------------
-window.__backCand = null;
-// v1.0.17: text key of a word for look-alike detection (no diacritics, no leading و/ف conjunction).
-window.__lookKey = function(t) {
-  let k = (typeof normArabic === 'function') ? normArabic(t || '') : String(t || '');
-  k = k.replace(/\s+/g, '');
-  if (k.length > 3) k = k.replace(/^[وف]/, '');
-  return k;
-};
-window.__postReanchor = function(idx) {
-  try {
-    const o = currentWordList[idx];
-    if (!o || !window.Tasmee || typeof window.Tasmee.postMessage !== 'function') return;
-    const list = window.__getAyahRealWordIndices(currentWordList, o.s || 0, o.a || 0);
-    let w = list.indexOf(idx);
-    if (w < 0) w = 0;
-    window.Tasmee.postMessage(JSON.stringify({ a: 'reanchor', surah: o.s || 1, ayah: o.a || 1, wordInAyah: w }));
-  } catch (_) {}
-};
-// Consonant skeleton with look-alike letters merged (q/k, th/s, ...) and long vowels dropped.
-window.__soundSkeleton = function(t) {
-  let s = (typeof normArabic === 'function') ? normArabic(t || '') : String(t || '');
-  s = s.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/\s+/g, '').replace(/^ال/, '');
-  const map = { 'ق': 'ك', 'ذ': 'ز', 'ظ': 'ز', 'ث': 'س', 'ص': 'س', 'ض': 'د', 'ط': 'ت', 'غ': 'خ', 'ح': 'ه', 'ة': 'ه',
-    'ع': 'ء', 'أ': 'ء', 'إ': 'ء', 'ؤ': 'ء', 'ئ': 'ء', 'آ': 'ء', 'ٱ': 'ا', 'ى': 'ي' };
-  let out = '';
-  for (const ch of s) {
-    const m = map[ch] || ch;
-    if (m === 'ا' || m === 'و' || m === 'ي' || m === 'ء') continue;
-    if (!/[\u0621-\u064A]/.test(m)) continue;
-    out += m;
-  }
-  return out;
-};
-window.__soundsAlike = function(a, b) {
-  const x = window.__soundSkeleton(a), y = window.__soundSkeleton(b);
-  if (!x || !y) return false;
-  // Longest common subsequence of the two skeletons: at least 2 letters AND >= 60% of the shorter word.
-  const m = x.length, n = y.length;
-  let prev = new Array(n + 1).fill(0);
-  for (let i = 1; i <= m; i++) {
-    const cur = [0];
-    for (let j = 1; j <= n; j++) cur.push(x[i - 1] === y[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]));
-    prev = cur;
-  }
-  const lcs = prev[n];
-  return lcs >= 2 && lcs >= Math.ceil(Math.min(m, n) * 0.6);
-};
-window.__resolveBackCandForward = function(targetIdx) {
-  try {
-    const c = window.__backCand;
-    if (!c) return;
-    if (c.list !== currentWordList) { clearTimeout(c.timer); window.__backCand = null; return; }
-    if (targetIdx < currentWordIndex) return; // still a backward event
-    clearTimeout(c.timer); window.__backCand = null;
-    // The reader moved on, so the held backward match was the tracker mis-hearing the word he was saying.
-    let exp = currentWordIndex;
-    while (exp < currentWordList.length && window.__isPauseToken(currentWordList[exp])) exp++;
-    if (targetIdx === exp + 1 && wordStates[exp] === 'pending') wordStates[exp] = 'ok';
-  } catch (_) {}
-};
-window.__expireBackCand = function(c) {
-  try {
-    if (window.__backCand !== c) return;
-    window.__backCand = null;
-    if (c.list !== currentWordList || typeof currentWordIndex !== 'number') return;
-    if (typeof haltError !== 'undefined' && haltError) return;
-    let exp = currentWordIndex;
-    while (exp < currentWordList.length && window.__isPauseToken(currentWordList[exp])) exp++;
-    if (exp >= currentWordList.length) return;
-    const expObj = currentWordList[exp], candObj = currentWordList[c.first];
-    // The reader was speaking and the tracker answered with a look-alike word far behind: treat the expected word as said.
-    if (expObj && candObj && wordStates[exp] === 'pending' && window.__soundsAlike(candObj.t, expObj.t)) {
-      wordStates[exp] = 'ok';
-      window.__lastGreenTs = Date.now();
-      if (typeof window.__verifyNoteGreen === 'function') window.__verifyNoteGreen(exp);
-      currentWordIndex = Math.min(currentWordList.length, exp + 1);
-      if (typeof advancePastPauseMarks === 'function') advancePastPauseMarks();
-      if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
-      if (currentWordIndex >= currentWordList.length && typeof finishPageOrAdvance === 'function') { finishPageOrAdvance(true); return; }
-    }
-    window.__postReanchor(currentWordIndex);
   } catch (_) {}
 };
 
@@ -12833,16 +12574,6 @@ window.__onReciteStall = function(d) {
     const prevObj = idx > 0 ? currentWordList[idx - 1] : null;
     const meta = window.__analyzeWordTajweedAndWaqf(obj, nextObj, prevObj) || { rules: [] };
     const rules = meta.rules || [];
-    // v1.0.17: spelled-out letters (ﺍلم) are accepted after ~1.6 s of speech instead of being flagged red.
-    if (rules.includes('muqattaah_madd') && voiced >= 1600) {
-      wordStates[idx] = 'ok';
-      window.__lastGreenTs = Date.now();
-      currentWordIndex = idx + 1;
-      if (typeof advancePastPauseMarks === 'function') advancePastPauseMarks();
-      if (currentWordIndex < currentWordList.length) window.__postJumpToWord(currentWordIndex);
-      if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
-      return false;
-    }
     const lenient = !!meta.atValidWaqf || rules.some(r => r === 'madd' || r === 'muqattaah_madd' || r === 'idgham' || r === 'ikhfa' || r === 'iqlab' || r === 'meem_sakinah');
     const need = lenient ? 4600 : 2300;
     const info = { voiced, need, idx, lenient, flagged: false };
@@ -12988,7 +12719,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const _sb = localStorage.getItem('tasmee_bell_sound');
     const _bEl = document.getElementById('cfg-bell-sound');
     if (_sb !== null && _bEl) _bEl.checked = (_sb === '1');
-    const _vf = localStorage.getItem('tasmee_verify_v1014');
+    const _vf = localStorage.getItem('tasmee_verify_errors');
     const _vfEl = document.getElementById('cfg-verify-errors');
     if (_vf !== null) { window.__reciteVerifyEnabled = (_vf === '1'); if (_vfEl) _vfEl.checked = (_vf === '1'); }
     const _sd = localStorage.getItem('tasmee_stall_detect');
