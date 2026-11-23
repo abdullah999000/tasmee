@@ -4124,6 +4124,10 @@ html[data-theme="light"] #tasmee-exit-toast {
           <input type="checkbox" id="cfg-vibrate-on-error" checked onchange="try{localStorage.setItem('tasmee_vibrate_on_error',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
         </label>
         <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
+          <span>🔎 التحقق النصي من الأخطاء دون إنترنت (رأي ثانٍ عبر Whisper)</span>
+          <input type="checkbox" id="cfg-verify-errors" checked onchange="window.__reciteVerifyEnabled=this.checked;try{localStorage.setItem('tasmee_verify_errors',this.checked?'1':'0')}catch(_){}" style="width:18px;height:18px;accent-color:var(--accent-green);">
+        </label>
+        <label style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;cursor:pointer;">
           <span>⏸ التوقف الإجباري عند الخطأ حتى تصحيحه</span>
           <input type="checkbox" id="cfg-stop-on-error" checked style="width:18px;height:18px;accent-color:var(--accent-green);" onchange="if(stopOnErrorMandatory !== this.checked) toggleStopOnErrorMode();">
         </label>
@@ -4921,6 +4925,14 @@ if (window.Tasmee) {
     }
     if (type === 'recite_word') {
       if (typeof window.__onReciteQuranWord === 'function') window.__onReciteQuranWord(data || {});
+      return;
+    }
+    if (type === 'recite_segment_cut') {
+      if (typeof window.__onReciteSegmentCut === 'function') window.__onReciteSegmentCut(data || {});
+      return;
+    }
+    if (type === 'recite_verify') {
+      if (typeof window.__onReciteVerifyText === 'function') window.__onReciteVerifyText(data || {});
       return;
     }
     if (type === 'model_progress') {
@@ -12176,6 +12188,7 @@ window.__onReciteQuranWord = function(ev) {
         if (typeof wordStates !== 'undefined' && Array.isArray(wordStates)) {
           wordStates[targetIdx] = 'ok';
         }
+        if (typeof window.__verifyNoteGreen === 'function') window.__verifyNoteGreen(targetIdx);
         if (typeof currentWordIndex !== 'undefined') {
           currentWordIndex = Math.min(currentWordList.length, targetIdx + 1);
           if (typeof advancePastPauseMarks === 'function') {
@@ -12289,6 +12302,220 @@ window.__onReciteQuranWord = function(ev) {
       });
     }
   } catch (_) {}
+};
+
+// ==========================================================================
+// SECOND-OPINION TEXT VERIFIER (v1.0.12)
+// recite_quran (TrackerConfig.easy) is a forced-alignment tracker: it marks words green but almost never
+// reports a wrong word. Here the native side cuts the audio on natural pauses, transcribes it with the bundled
+// Whisper-Quran model and this block compares that TEXT with the words the tracker just accepted.
+// Conservative by design (Tarteel PDF Sec 13.3): a false alarm is worse than a missed error.
+// ==========================================================================
+window.__reciteVerifyEnabled = true;
+window.__verifyBuf = [];
+window.__verifySnaps = {};
+window.__lastVerifyInfo = null;
+
+window.__verifyNoteGreen = function(idx) {
+  const b = window.__verifyBuf;
+  b.push(idx);
+  if (b.length > 400) b.splice(0, b.length - 400);
+};
+
+// Needleman-Wunsch style word alignment: expected words vs spoken tokens (match / substitute / omit / extra token / merged idgham)
+window.__verifyAlign = function(exps, tokens) {
+  const n = exps.length, m = tokens.length;
+  const NEG = -1e9;
+  const memo = new Map();
+  const matchAt = (i, j) => {
+    const key = i * 100003 + j;
+    let v = memo.get(key);
+    if (v === undefined) { v = !!isWordMatch(tokens[j], exps[i]); memo.set(key, v); }
+    return v;
+  };
+  const dp = [], op = [];
+  for (let i = 0; i <= n; i++) { dp.push(new Array(m + 1).fill(NEG)); op.push(new Array(m + 1).fill(0)); }
+  dp[0][0] = 0;
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= m; j++) {
+      if (i === 0 && j === 0) continue;
+      let best = NEG, bo = 0;
+      if (i > 0 && j > 0) {
+        const ok = matchAt(i - 1, j - 1);
+        const sc = dp[i - 1][j - 1] + (ok ? 2 : -1);
+        if (sc > best) { best = sc; bo = ok ? 1 : 2; }
+      }
+      if (i > 0) { const sc = dp[i - 1][j] - 1; if (sc > best) { best = sc; bo = 3; } }
+      if (j > 0) { const sc = dp[i][j - 1] - 0.5; if (sc > best) { best = sc; bo = 4; } }
+      if (i > 1 && j > 0 && typeof isIdghamMergedMatch === 'function' && isIdghamMergedMatch(tokens[j - 1], exps[i - 2], exps[i - 1])) {
+        const sc = dp[i - 2][j - 1] + 3;
+        if (sc > best) { best = sc; bo = 5; }
+      }
+      dp[i][j] = best; op[i][j] = bo;
+    }
+  }
+  const res = [];
+  for (let i = 0; i < n; i++) res.push({ matched: false, spoken: null, how: 'omit' });
+  let i = n, j = m;
+  while (i > 0 || j > 0) {
+    const o = op[i][j];
+    if (o === 1) { res[i - 1] = { matched: true, spoken: tokens[j - 1], how: 'match' }; i--; j--; }
+    else if (o === 2) { res[i - 1] = { matched: false, spoken: tokens[j - 1], how: 'sub' }; i--; j--; }
+    else if (o === 3) { res[i - 1] = { matched: false, spoken: null, how: 'omit' }; i--; }
+    else if (o === 4) { j--; }
+    else if (o === 5) {
+      res[i - 1] = { matched: true, spoken: tokens[j - 1], how: 'merged' };
+      res[i - 2] = { matched: true, spoken: tokens[j - 1], how: 'merged' };
+      i -= 2; j--;
+    } else break;
+  }
+  return res;
+};
+
+window.__verifyNearMiss = function(spoken, expected) {
+  const a = normArabic(spoken || '').replace(/\s+/g, '');
+  const b = normArabic(expected || '').replace(/\s+/g, '');
+  if (!a || !b) return false;
+  const m = a.length, n = b.length;
+  let prev = [];
+  for (let j = 0; j <= n; j++) prev.push(j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur.push(Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+    }
+    prev = cur;
+  }
+  const d = prev[n];
+  return d <= Math.max(1, Math.floor(Math.max(m, n) * 0.34));
+};
+
+// exps: [{obj:{t,s,a}, idx}] in reading order. Returns {flags:[{idx,spoken,type}], ratio, skipped}
+window.__verifySegment = function(exps, text) {
+  const out = { flags: [], ratio: 0, skipped: '' };
+  const raw = String(text || '').split(/\s+/).filter(Boolean);
+  const tokens = normalizeTokenStream(raw).filter(t => normArabic(t).replace(/\s+/g, '').length > 0);
+  if (exps.length < 3) { out.skipped = 'too_few_words'; return out; }
+  if (tokens.length < 2) { out.skipped = 'no_transcript'; return out; }
+  const al = window.__verifyAlign(exps.map(e => e.obj.t), tokens);
+  const n = exps.length;
+  out.ratio = al.filter(a => a.matched).length / n;
+  // If the transcript hardly overlaps the expected words the recogniser itself is lost: judge nothing.
+  if (out.ratio < 0.6) { out.skipped = 'low_overlap'; return out; }
+  let k = 0;
+  while (k < n) {
+    if (al[k].matched) { k++; continue; }
+    let e = k;
+    while (e < n && !al[e].matched) e++;
+    const runLen = e - k;
+    // Only interior, isolated runs (<=2 words) with matched words on BOTH sides: edges are often clipped by the audio cut.
+    if (k > 0 && e < n && runLen <= 2) {
+      for (let q = k; q < e; q++) {
+        const obj = exps[q].obj;
+        const norm = normArabic(obj.t).replace(/\s+/g, '');
+        if (norm.length < 3) continue;
+        let rules = [];
+        try {
+          const meta = window.__analyzeWordTajweedAndWaqf(obj, q + 1 < n ? exps[q + 1].obj : null, q > 0 ? exps[q - 1].obj : null);
+          rules = (meta && meta.rules) || [];
+        } catch (_) {}
+        if (rules.some(r => r === 'idgham' || r === 'iqlab' || r === 'ikhfa' || r === 'meem_sakinah' || r === 'muqattaah_madd')) continue;
+        const isOmit = al[q].how === 'omit';
+        if (isOmit && out.ratio < 0.85) continue;
+        // A near-miss spelling (1-2 letters) is far more likely to be the small Whisper model's own slip than a real
+        // wrong word, so only a clearly DIFFERENT word is judged (word-level scope, like Tarteel: no letter/makhraj judging).
+        if (!isOmit && window.__verifyNearMiss(al[q].spoken, obj.t)) continue;
+        out.flags.push({ idx: exps[q].idx, spoken: al[q].spoken || '', type: isOmit ? 'omission' : 'substitution' });
+      }
+    }
+    k = e;
+  }
+  return out;
+};
+
+// Retroactive mistake: the cursor has already moved on, so this must NOT advance / finish the page.
+window.__flagRetroMistake = function(idx, spoken, type) {
+  try {
+    const obj = currentWordList[idx];
+    if (!obj || wordStates[idx] === 'wrong') return false;
+    const prevCursor = currentWordIndex;
+    wordStates[idx] = 'wrong';
+    if (typeof addRedMark === 'function') addRedMark(currentPage, idx);
+    if (typeof sessionErrorKeys !== 'undefined') sessionErrorKeys.add(currentPage + ':' + idx);
+    if (!wordErrors.some(e => e.index === idx)) {
+      wordErrors.push({ index: idx, expected: obj.t || '', spoken: spoken || '', type: type || 'substitution',
+        ayah: obj.a || 1, surah: obj.s || 2, atWaqf: false, offline: true, verifier: true, ts: Date.now() });
+    }
+    if (typeof recordUserMistake === 'function') recordUserMistake(obj, idx, spoken || '');
+    if (typeof ringErrorBellFor === 'function') ringErrorBellFor(currentPage, idx);
+    if (typeof stopOnErrorMandatory !== 'undefined' && stopOnErrorMandatory) {
+      for (let q = idx + 1; q < Math.min(prevCursor, wordStates.length); q++) {
+        if (wordStates[q] === 'ok') wordStates[q] = 'pending';
+      }
+      currentWordIndex = idx;
+      haltError = { index: idx, word: obj.t || '', spoken: spoken || '', type: type || 'substitution' };
+      const bar = document.getElementById('halt-alert-bar');
+      const nameEl = document.getElementById('halt-word-name');
+      const heardEl = document.getElementById('halt-heard-note');
+      if (nameEl) nameEl.textContent = obj.t || '';
+      if (heardEl) heardEl.textContent = spoken ? ` (سُمع: ${spoken})` : ' (كلمة ناقصة)';
+      if (bar) bar.style.display = 'flex';
+      if (window.Tasmee && typeof window.Tasmee.postMessage === 'function') {
+        try {
+          const list = window.__getAyahRealWordIndices(currentWordList, obj.s || 0, obj.a || 0);
+          let w = list.indexOf(idx);
+          if (w < 0) w = 0;
+          window.Tasmee.postMessage(JSON.stringify({ a: 'halt_on_error', surah: obj.s || 1, ayah: obj.a || 1, wordInAyah: w }));
+        } catch (_) {}
+      }
+    }
+    if (typeof refreshActiveViewsAfterStep === 'function') refreshActiveViewsAfterStep();
+    return true;
+  } catch (_) { return false; }
+};
+
+window.__onReciteSegmentCut = function(d) {
+  try {
+    const id = String((d && d.segId) || '');
+    const set = Array.from(new Set(window.__verifyBuf)).sort((a, b) => a - b);
+    window.__verifyBuf = [];
+    window.__verifySnaps[id] = { idxs: set, page: (typeof currentPage !== 'undefined' ? currentPage : 0), list: (typeof currentWordList !== 'undefined' ? currentWordList : null) };
+    const keys = Object.keys(window.__verifySnaps);
+    if (keys.length > 6) delete window.__verifySnaps[keys[0]];
+  } catch (_) {}
+};
+
+window.__onReciteVerifyText = function(d) {
+  try {
+    const id = String((d && d.segId) || '');
+    const snap = window.__verifySnaps[id];
+    delete window.__verifySnaps[id];
+    const text = String((d && d.text) || '').trim();
+    const info = { segId: id, text, flags: 0, skipped: '' };
+    window.__lastVerifyInfo = info;
+    const pv = document.getElementById('live-heard-preview');
+    if (!window.__reciteVerifyEnabled || !snap || !text || !snap.idxs.length) { info.skipped = 'disabled_or_empty'; return info; }
+    if (typeof currentPage === 'undefined' || snap.page !== currentPage || snap.list !== currentWordList) { info.skipped = 'page_changed'; return info; }
+    const lo = snap.idxs[0], hi = snap.idxs[snap.idxs.length - 1];
+    if (hi - lo > 45) { info.skipped = 'range_too_wide'; return info; }
+    const exps = [];
+    for (let i = lo; i <= hi; i++) {
+      const o = currentWordList[i];
+      if (o && !window.__isPauseToken(o)) exps.push({ obj: o, idx: i });
+    }
+    const r = window.__verifySegment(exps, text);
+    info.skipped = r.skipped;
+    info.ratio = r.ratio;
+    let n = 0;
+    for (const f of r.flags) { if (window.__flagRetroMistake(f.idx, f.spoken, f.type)) n++; }
+    info.flags = n;
+    if (pv) pv.textContent = `🔎 تحقق: ${text.slice(0, 60)}${n ? ' • ⚠️ ' + n + ' خطأ' : ''}`;
+    if (window.TasmeeAsrDiagnostics && n) {
+      window.TasmeeAsrDiagnostics.log({ engine: 'whisper-verifier', expected: r.flags.map(f => (currentWordList[f.idx] || {}).t).join(' '),
+        recognized: text, latencyMs: null, eventType: 'mismatch', offline: true });
+    }
+    return info;
+  } catch (_) { return null; }
 };
 
 // O(1) Quranic Tajweed, Waqf & Ibtida, and Breathing Analyzer (per Tarteel PDF Sec 6, 13.2-13.4, 16.3, 16.5)
@@ -12412,6 +12639,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const _sb = localStorage.getItem('tasmee_bell_sound');
     const _bEl = document.getElementById('cfg-bell-sound');
     if (_sb !== null && _bEl) _bEl.checked = (_sb === '1');
+    const _vf = localStorage.getItem('tasmee_verify_errors');
+    const _vfEl = document.getElementById('cfg-verify-errors');
+    if (_vf !== null) { window.__reciteVerifyEnabled = (_vf === '1'); if (_vfEl) _vfEl.checked = (_vf === '1'); }
     const _sv = localStorage.getItem('tasmee_vibrate_on_error');
     const _vEl = document.getElementById('cfg-vibrate-on-error');
     if (_sv !== null && _vEl) _vEl.checked = (_sv === '1');

@@ -79,6 +79,16 @@ class _HomeState extends State<Home> {
   bool _reciteSentinelClearedThisRun = false;
   Timer? _reciteSentinelClearTimer;
   int _reciteEpoch = 0;
+  // Second-opinion verifier (v1.0.12): cuts live audio on natural pauses and transcribes it with the
+  // bundled Whisper-Quran model so the page can compare TEXT with the words recite_quran accepted.
+  static const int _vSampleRate = 16000;
+  final List<Float32List> _vChunks = <Float32List>[];
+  int _vSamples = 0;
+  int _vVoiceSamples = 0;
+  int _vTrailSilenceSamples = 0;
+  int _vSegSeq = 0;
+  int _vQueued = 0;
+  Future<void> _vChain = Future<void>.value();
   bool _onDeviceGotResult = false;
   bool _onDeviceFallbackTriggered = false;
   bool _onDeviceSttUnavailable = false;
@@ -548,6 +558,7 @@ class _HomeState extends State<Home> {
     _pendingTranscribeJobs = 0;
     _chunkBuffer.clear();
     if (_usingReciteQuran) {
+      _verifyReset();
       _reciteAudio?.clearBuffer();
       if (_reciteTracker != null) {
         try {
@@ -1036,6 +1047,7 @@ class _HomeState extends State<Home> {
               _js('level', pct);
             }
           }
+          if (chunk.isNotEmpty) _verifyFeed(chunk, _reciteLastChunkRms);
           _reciteTracker?.feedAudioChunk(chunk, isFinal: isFinal);
         },
       );
@@ -1048,9 +1060,99 @@ class _HomeState extends State<Home> {
     }
   }
 
+  void _verifyReset() {
+    _vChunks.clear();
+    _vSamples = 0;
+    _vVoiceSamples = 0;
+    _vTrailSilenceSamples = 0;
+  }
+
+  void _verifyFeed(Float32List chunk, double rms) {
+    if (chunk.isEmpty) return;
+    final bool voiced = rms > 0.015;
+    _vChunks.add(Float32List.fromList(chunk));
+    _vSamples += chunk.length;
+    if (voiced) {
+      _vVoiceSamples += chunk.length;
+      _vTrailSilenceSamples = 0;
+    } else {
+      _vTrailSilenceSamples += chunk.length;
+    }
+    if (_vVoiceSamples == 0) {
+      // No speech yet: keep only ~0.3s of lead-in so the first word is not clipped.
+      while (_vSamples > (_vSampleRate * 3 ~/ 10) && _vChunks.length > 1) {
+        final d = _vChunks.removeAt(0);
+        _vSamples -= d.length;
+      }
+      return;
+    }
+    final bool pauseCut = _vVoiceSamples >= (_vSampleRate * 12 ~/ 10) && _vTrailSilenceSamples >= (_vSampleRate * 7 ~/ 10);
+    final bool maxCut = _vSamples >= _vSampleRate * 8;
+    if (pauseCut || maxCut) _verifyFlush();
+  }
+
+  void _verifyFlush() {
+    if (_vChunks.isEmpty) return;
+    final int total = _vSamples;
+    final pcm = Uint8List(total * 2);
+    final bd = ByteData.sublistView(pcm);
+    int o = 0;
+    for (final c in _vChunks) {
+      for (int i = 0; i < c.length; i++) {
+        final s16 = (c[i] * 32767.0).round().clamp(-32768, 32767);
+        bd.setInt16(o, s16, Endian.little);
+        o += 2;
+      }
+    }
+    _verifyReset();
+    final int segId = ++_vSegSeq;
+    // Tell the page which words the tracker accepted up to this cut BEFORE the (slower) transcript arrives.
+    _js('recite_segment_cut', {'segId': segId});
+    if (_vQueued >= 2) {
+      _js('recite_verify', {'segId': segId, 'text': '', 'dropped': true});
+      return;
+    }
+    _vQueued++;
+    final int epoch = _reciteEpoch;
+    _vChain = _vChain.then((_) => _verifyTranscribe(segId, pcm, epoch));
+  }
+
+  Future<void> _verifyTranscribe(int segId, Uint8List pcm, int epoch) async {
+    try {
+      if (!_want || !_usingReciteQuran || _reciteEpoch != epoch) return;
+      final modelPath = await _prepareBundledWhisperModel();
+      if (modelPath == null) {
+        _js('recite_verify', {'segId': segId, 'text': '', 'noModel': true});
+        return;
+      }
+      final tmpDir = await getTemporaryDirectory();
+      final wav = File('${tmpDir.path}/tasmee_verify_${segId % 3}.wav');
+      await wav.writeAsBytes(_wrapPcm16AsWav(pcm), flush: true);
+      final res = await _whisper.transcribe(
+        model: WhisperModel.tiny,
+        audioPath: wav.path,
+        lang: 'ar',
+        initialPrompt: null,
+        suppressNonSpeechTokens: false,
+        keepModelLoaded: true,
+        noContext: true,
+        maxContext: 0,
+      );
+      final clean = _cleanWhisperText(res?.transcription.text ?? '');
+      if (_want && _usingReciteQuran && _reciteEpoch == epoch) {
+        _js('recite_verify', {'segId': segId, 'text': clean});
+      }
+    } catch (e) {
+      _js('recite_verify', {'segId': segId, 'text': '', 'error': e.toString()});
+    } finally {
+      if (_vQueued > 0) _vQueued--;
+    }
+  }
+
   Future<void> _stopReciteQuranLive() async {
     _reciteEpoch++;
     _reciteSentinelClearTimer?.cancel();
+    _verifyReset();
     await _clearReciteSentinelNow();
     await _reciteWordSub?.cancel();
     _reciteWordSub = null;
